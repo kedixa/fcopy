@@ -1,0 +1,63 @@
+#ifndef FCOPY_HANDLER_H
+#define FCOPY_HANDLER_H
+
+#include <string>
+#include <vector>
+#include <mutex>
+
+#include "co_fcopy.h"
+
+struct RemoteTarget {
+    std::string host;
+    unsigned short port;
+};
+
+struct FcopyParams {
+    uint16_t compress_type  = 0;
+    uint32_t chunk_size     = 4UL * 1024 * 1024;
+    uint32_t file_perm      = 0;
+    std::string file_path;
+
+    std::string partition;
+    std::string remote_file_dir;
+    std::string remote_file_name;
+
+    int parallel            = 16;
+    std::vector<RemoteTarget> targets;
+};
+
+struct FcopyInfo : public FcopyParams {
+    int fd = -1;
+    std::size_t file_size = 0;
+
+    std::vector<std::string> file_tokens;
+};
+
+class FcopyHandler {
+public:
+    FcopyHandler(FcopyClient cli, const FcopyParams &params)
+        : error(0), cli(cli)
+    {
+        finfo.FcopyParams::operator=(params);
+    }
+
+    coke::Task<int> create_file();
+    coke::Task<int> close_file();
+    coke::Task<int> send_file();
+
+private:
+    template<typename Req, typename Resp>
+    coke::Task<int> do_request(RemoteTarget target, Req &&req, Resp &resp);
+
+    coke::Task<> parallel_send(RemoteTarget target, std::string token);
+
+private:
+    int error;
+    FcopyClient cli;
+    FcopyInfo finfo;
+
+    std::mutex mtx;
+    std::size_t offset;
+};
+
+#endif // FCOPY_HANDLER_H
