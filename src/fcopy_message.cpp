@@ -100,11 +100,11 @@ static int decode_string(const std::string &s, std::size_t &pos, std::string &o)
 #define FAIL_IF(x) do { int ret = (x); if (ret < 0) return ret; } while(0)
 
 MessageBase::MessageBase(Command cmd, int16_t error) {
-    magic       = MAGIC;
-    version     = VERSION;
-    command     = static_cast<uint16_t>(cmd);
-    error       = error;
-    body_len    = 0;
+    this->magic     = MAGIC;
+    this->version   = VERSION;
+    this->command   = static_cast<uint16_t>(cmd);
+    this->error     = error;
+    this->body_len  = 0;
 }
 
 int MessageBase::encode_head(std::string &head) noexcept {
