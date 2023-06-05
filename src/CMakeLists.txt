@@ -19,6 +19,10 @@ add_executable(fcopy-cli
     fcopy_handler.cpp
 )
 
+install(TARGETS ${ALL_TARGETS}
+    DESTINATION bin
+)
+
 foreach(target ${ALL_TARGETS})
     target_link_directories(${target} PRIVATE
         ${WORKFLOW_LIB_DIR}
