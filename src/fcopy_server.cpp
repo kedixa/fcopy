@@ -57,7 +57,7 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
     }
     else {
         std::string_view data = req->get_content_view();
-        int error;
+        int error = 0;
 
         // write chain, can be parallelized here
         for (ChainTarget &target : targets) {
