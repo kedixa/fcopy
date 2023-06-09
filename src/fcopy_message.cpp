@@ -253,6 +253,7 @@ int SendFileReq::decode_body() noexcept {
     std::size_t pos = 0;
     uint32_t content_len;
 
+    FAIL_IF(decode_int(body, pos, max_chain_len));
     FAIL_IF(decode_int(body, pos, compress_type));
     FAIL_IF(decode_int(body, pos, origin_size));
     FAIL_IF(decode_int(body, pos, crc32));
@@ -274,6 +275,7 @@ int SendFileReq::decode_body() noexcept {
 int SendFileReq::encode_body(struct iovec vectors[], int max) noexcept {
     uint32_t content_len = content_view.size();
 
+    append_int(body, max_chain_len);
     append_int(body, compress_type);
     append_int(body, origin_size);
     append_int(body, crc32);

@@ -17,6 +17,7 @@ add_executable(fcopy-cli
     fcopy_message.cpp
     co_fcopy.cpp
     fcopy_handler.cpp
+    common.cpp
 )
 
 install(TARGETS ${ALL_TARGETS}

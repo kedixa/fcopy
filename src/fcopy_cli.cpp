@@ -21,6 +21,11 @@ coke::Task<> upload_file(FcopyClient &cli, FcopyParams params) {
             fprintf(stdout, "SendFileError error:%d\n", error);
         else
             fprintf(stdout, "SendFileDone\n");
+
+        std::string speed_str = h.get_speed_str();
+        double cost = h.get_cost_ms();
+        cost /= 1000000;
+        fprintf(stdout, "Send Cost:%.4lf Speed:%s\n", cost, speed_str.c_str());
     }
 
     error = co_await h.close_file();

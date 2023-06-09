@@ -128,6 +128,7 @@ private:
     void move_content_view(SendFileReq &&that) noexcept;
 
 public:
+    uint16_t max_chain_len = 0;
     uint16_t compress_type = 0;
     uint32_t origin_size   = 0;
     uint32_t crc32         = 0;
@@ -135,7 +136,7 @@ public:
     std::string file_token;
 
 private:
-    // local_view means the data in `content_view` is stored in `content`
+    // local_view means the data in `content_view` is stored in `content_copy`
     std::string_view content_view;
     bool local_view = false;
     std::string content_copy;

@@ -3,6 +3,8 @@
 #include <sys/stat.h>
 
 #include "fcopy_handler.h"
+#include "common.h"
+
 #include "coke/global.h"
 #include "coke/fileio.h"
 #include "coke/wait.h"
@@ -115,6 +117,8 @@ coke::Task<int> FcopyHandler::close_file() {
 }
 
 coke::Task<int> FcopyHandler::send_file() {
+    int64_t start = current_usec();
+
     offset = 0;
     error = 0;
 
@@ -125,6 +129,10 @@ coke::Task<int> FcopyHandler::send_file() {
         tasks.emplace_back(parallel_send(finfo.targets[0], finfo.file_tokens[0]));
 
     co_await coke::async_wait(std::move(tasks));
+
+    send_cost = current_usec() - start;
+    file_size = finfo.file_size;
+
     co_return error;
 }
 
@@ -157,6 +165,7 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
         SendFileReq req;
         SendFileResp resp;
 
+        req.max_chain_len = static_cast<uint16_t>(finfo.targets.size());
         req.compress_type = 0;
         req.origin_size = result.nbytes;
         req.crc32 = 0;
@@ -168,6 +177,10 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
         if (error)
             break;
     }
+}
+
+std::string FcopyHandler::get_speed_str() const {
+    return format_bps(file_size, send_cost);
 }
 
 template<typename Req, typename Resp>

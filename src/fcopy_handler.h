@@ -39,11 +39,17 @@ public:
         : error(0), cli(cli)
     {
         finfo.FcopyParams::operator=(params);
+        offset = 0;
+        file_size = 0;
+        send_cost = 0;
     }
 
     coke::Task<int> create_file();
     coke::Task<int> close_file();
     coke::Task<int> send_file();
+
+    std::string get_speed_str() const;
+    int64_t get_cost_ms() const { return send_cost; }
 
 private:
     template<typename Req, typename Resp>
@@ -58,6 +64,9 @@ private:
 
     std::mutex mtx;
     std::size_t offset;
+
+    std::size_t file_size;
+    int64_t send_cost;
 };
 
 #endif // FCOPY_HANDLER_H

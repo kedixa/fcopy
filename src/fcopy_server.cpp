@@ -1,7 +1,12 @@
 #include <string>
 #include <cstdlib>
 #include <cstdio>
+#include <csignal>
+
 #include <getopt.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <atomic>
 
 #include "coke/coke.h"
 #include "co_fcopy.h"
@@ -9,6 +14,12 @@
 
 FileManager mng;
 FcopyClient cli;
+std::atomic<bool> running{true};
+
+void signal_handler(int sig) {
+    running = false;
+    running.notify_all();
+}
 
 coke::Task<> handle_create_file(FcopyRequest &freq, FcopyResponse &fresp) {
     CreateFileReq *req = dynamic_cast<CreateFileReq *>(freq.get_message_pointer());
@@ -18,9 +29,9 @@ coke::Task<> handle_create_file(FcopyRequest &freq, FcopyResponse &fresp) {
 
     error = mng.create_file(req->file_name, req->file_size, req->chunk_size, file_token);
 
-    fprintf(stdout, "CreateFile file:%s size:%zu error:%d token:%s\n",
-        req->file_name.c_str(), (std::size_t)req->file_size, error, file_token.c_str()
-    );
+    //fprintf(stdout, "CreateFile file:%s size:%zu error:%d token:%s\n",
+    //    req->file_name.c_str(), (std::size_t)req->file_size, error, file_token.c_str()
+    //);
 
     resp.set_error(error);
     resp.file_token = file_token;
@@ -36,9 +47,9 @@ coke::Task<> handle_close_file(FcopyRequest &freq, FcopyResponse &fresp) {
 
     error = mng.close_file(req->file_token);
 
-    fprintf(stdout, "CloseFile error:%d token:%s\n",
-        error, req->file_token.c_str()
-    );
+    //fprintf(stdout, "CloseFile error:%d token:%s\n",
+    //    error, req->file_token.c_str()
+    //);
 
     resp.set_error(error);
     fresp.set_message(std::move(resp));
@@ -59,26 +70,32 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
         std::string_view data = req->get_content_view();
         int error = 0;
 
-        // write chain, can be parallelized here
-        for (ChainTarget &target : targets) {
-            SendFileReq sreq;
+        if (req->max_chain_len <= 1 && !targets.empty())
+            error = -ECANCELED;
 
-            sreq.compress_type = 0;
-            sreq.origin_size = data.size();
-            sreq.crc32 = 0;
-            sreq.offset = req->offset;
-            sreq.file_token = target.file_token;
-            sreq.set_content_view(data);
+        if (error == 0) {
+            // write chain, can be parallelized here
+            for (ChainTarget &target : targets) {
+                SendFileReq sreq;
 
-            FcopyRequest fsreq;
-            fsreq.set_message(std::move(sreq));
+                sreq.max_chain_len = req->max_chain_len - 1;
+                sreq.compress_type = 0;
+                sreq.origin_size = data.size();
+                sreq.crc32 = 0;
+                sreq.offset = req->offset;
+                sreq.file_token = target.file_token;
+                sreq.set_content_view(data);
 
-            FcopyAwaiter::ResultType result = co_await cli.request(target.host, target.port, std::move(fsreq));
-            if (result.state != coke::STATE_SUCCESS)
-                error = result.error;
+                FcopyRequest fsreq;
+                fsreq.set_message(std::move(sreq));
 
-            if (error)
-                break;
+                FcopyAwaiter::ResultType result = co_await cli.request(target.host, target.port, std::move(fsreq));
+                if (result.state != coke::STATE_SUCCESS)
+                    error = result.error;
+
+                if (error)
+                    break;
+            }
         }
 
         if (error == 0) {
@@ -137,9 +154,48 @@ coke::Task<> process(FcopyServerContext ctx) {
     co_await ctx.reply();
 }
 
-const char *opts = "p:h";
+void start_server(int port) {
+    WFServerParams params = SERVER_PARAMS_DEFAULT;
+    params.request_size_limit = 128ULL * 1024 * 1024;
+
+    FcopyServer server(params, process);
+
+    if (server.start(port) == 0) {
+        //fprintf(stdout, "ServerStart port:%d\n", (int)port);
+        //fprintf(stdout, "Press Enter to exit\n");
+
+        running.wait(true);
+        server.stop();
+    }
+    else {
+        //fprintf(stdout, "ServerStartFailed error:%d\n", (int)errno);
+    }
+}
+
+void daemon() {
+    int fd;
+
+    fd = fork();
+
+    if (fd != 0)
+        exit(0);
+
+    setsid();
+    fd = open("/dev/null", O_RDWR, 0);
+
+    if (fd > 0) {
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+
+        close(fd);
+    }
+}
+
+const char *opts = "gp:h";
 
 struct option long_opts[] = {
+    {"background", 0, nullptr, 'g'},
     {"port", 1, nullptr, 'p'},
     {"help", 0, nullptr, 'h'},
 };
@@ -148,6 +204,7 @@ void usage(const char *name) {
     printf(
         "%s -p listen_port\n\n"
         "  -p, --port listen_port       start server on `listen port`\n"
+        "  -g, --background             running in the background\n"
         "  -h, --help                   show this usage\n"
     , name);
 }
@@ -155,10 +212,12 @@ void usage(const char *name) {
 int main(int argc, char *argv[]) {
     int copt;
     int port = 0;
+    int background = 0;
 
     while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
         switch (copt) {
         case 'p': port = std::atoi(optarg); break;
+        case 'g': background = 1; break;
 
         case 'h':
         default:
@@ -172,21 +231,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    WFServerParams params = SERVER_PARAMS_DEFAULT;
-    params.request_size_limit = 128ULL * 1024 * 1024;
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
 
-    FcopyServer server(params, process);
+    if (background)
+        daemon();
 
-    if (server.start(port) == 0) {
-        fprintf(stdout, "ServerStart port:%d\n", (int)port);
-        fprintf(stdout, "Press Enter to exit\n");
-
-        std::getchar();
-        server.stop();
-    }
-    else {
-        fprintf(stdout, "ServerStartFailed error:%d\n", (int)errno);
-    }
+    start_server(port);
 
     return 0;
 }
