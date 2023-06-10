@@ -71,7 +71,11 @@ protected:
 
 class CreateFileReq : public MessageBase {
 public:
-    CreateFileReq() : MessageBase(Command::CREATE_FILE_REQ) { }
+    constexpr static Command ReqCmd = Command::CREATE_FILE_REQ;
+    constexpr static Command RespCmd = Command::CREATE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::CREATE_FILE_REQ;
+
+    CreateFileReq() : MessageBase(ThisCmd) { }
 
 protected:
     int decode_body() noexcept override;
@@ -88,7 +92,11 @@ public:
 
 class CreateFileResp : public MessageBase {
 public:
-    CreateFileResp() : MessageBase(Command::CREATE_FILE_RESP) { }
+    constexpr static Command ReqCmd = Command::CREATE_FILE_REQ;
+    constexpr static Command RespCmd = Command::CREATE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::CREATE_FILE_RESP;
+
+    CreateFileResp() : MessageBase(ThisCmd) { }
 
 protected:
     int decode_body() noexcept override;
@@ -100,7 +108,11 @@ public:
 
 class SendFileReq : public MessageBase {
 public:
-    SendFileReq() : MessageBase(Command::SEND_FILE_REQ) { }
+    constexpr static Command ReqCmd = Command::SEND_FILE_REQ;
+    constexpr static Command RespCmd = Command::SEND_FILE_RESP;
+    constexpr static Command ThisCmd = Command::SEND_FILE_REQ;
+
+    SendFileReq() : MessageBase(ThisCmd) { }
     SendFileReq(SendFileReq &&);
     SendFileReq &operator= (SendFileReq &&) noexcept;
 
@@ -144,12 +156,20 @@ private:
 
 class SendFileResp : public MessageBase {
 public:
-    SendFileResp() : MessageBase(Command::SEND_FILE_RESP) { }
+    constexpr static Command ReqCmd = Command::SEND_FILE_REQ;
+    constexpr static Command RespCmd = Command::SEND_FILE_RESP;
+    constexpr static Command ThisCmd = Command::SEND_FILE_RESP;
+
+    SendFileResp() : MessageBase(ThisCmd) { }
 };
 
 class CloseFileReq : public MessageBase {
 public:
-    CloseFileReq() : MessageBase(Command::CLOSE_FILE_REQ) { }
+    constexpr static Command ReqCmd = Command::CLOSE_FILE_REQ;
+    constexpr static Command RespCmd = Command::CLOSE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::CLOSE_FILE_REQ;
+
+    CloseFileReq() : MessageBase(ThisCmd) { }
 
 protected:
     int decode_body() noexcept override;
@@ -161,12 +181,20 @@ public:
 
 class CloseFileResp : public MessageBase {
 public:
-    CloseFileResp() : MessageBase(Command::CLOSE_FILE_RESP) { }
+    constexpr static Command ReqCmd = Command::CLOSE_FILE_REQ;
+    constexpr static Command RespCmd = Command::CLOSE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::CLOSE_FILE_RESP;
+
+    CloseFileResp() : MessageBase(ThisCmd) { }
 };
 
 class DeleteFileReq : public MessageBase {
 public:
-    DeleteFileReq() : MessageBase(Command::DELETE_FILE_REQ) { }
+    constexpr static Command ReqCmd = Command::DELETE_FILE_REQ;
+    constexpr static Command RespCmd = Command::DELETE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::DELETE_FILE_REQ;
+
+    DeleteFileReq() : MessageBase(ThisCmd) { }
 
 protected:
     int decode_body() noexcept override;
@@ -178,12 +206,20 @@ public:
 
 class DeleteFileResp : public MessageBase {
 public:
-    DeleteFileResp() : MessageBase(Command::DELETE_FILE_RESP) { }
+    constexpr static Command ReqCmd = Command::DELETE_FILE_REQ;
+    constexpr static Command RespCmd = Command::DELETE_FILE_RESP;
+    constexpr static Command ThisCmd = Command::DELETE_FILE_RESP;
+
+    DeleteFileResp() : MessageBase(ThisCmd) { }
 };
 
 class SetChainReq : public MessageBase {
 public:
-    SetChainReq() : MessageBase(Command::SET_CHAIN_REQ) { }
+    constexpr static Command ReqCmd = Command::SET_CHAIN_REQ;
+    constexpr static Command RespCmd = Command::SET_CHAIN_RESP;
+    constexpr static Command ThisCmd = Command::SET_CHAIN_REQ;
+
+    SetChainReq() : MessageBase(ThisCmd) { }
 
 protected:
     int decode_body() noexcept override;
@@ -196,7 +232,11 @@ public:
 
 class SetChainResp : public MessageBase {
 public:
-    SetChainResp() : MessageBase(Command::SET_CHAIN_RESP) { }
+    constexpr static Command ReqCmd = Command::SET_CHAIN_REQ;
+    constexpr static Command RespCmd = Command::SET_CHAIN_RESP;
+    constexpr static Command ThisCmd = Command::SET_CHAIN_RESP;
+
+    SetChainResp() : MessageBase(ThisCmd) { }
 };
 
 class FcopyMessage : public protocol::ProtocolMessage {
@@ -216,6 +256,17 @@ public:
 
     MessageBase *get_message_pointer() {
         return message.get();
+    }
+
+    template<typename MessageType>
+    bool move_message(MessageType &m) {
+        if (get_command() == MessageType::ThisCmd) {
+            auto *ptr = static_cast<MessageType *>(message.get());
+            m = std::move(*ptr);
+            message.reset();
+            return true;
+        }
+        return false;
     }
 
     template<typename M>

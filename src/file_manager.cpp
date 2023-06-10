@@ -39,6 +39,28 @@ FileManager::get_token(const std::string &path) {
     return oss.str();
 }
 
+bool create_directories(const std::string &path) {
+    fs::path p(path);
+    std::error_code ec;
+
+    if (p.has_filename())
+        p.remove_filename();
+
+    if (!fs::exists(p, ec))
+        fs::create_directories(p, ec);
+
+    return ec.value() == 0;
+}
+
+bool is_subpath(const std::string &base, const std::string &path) {
+    fs::path base_path(base);
+    fs::path another_path(path);
+    fs::path relative_path = fs::relative(base_path, another_path);
+    std::string relative = relative_path;
+
+    return !relative.starts_with("../");
+}
+
 FileManager::FileManager() { }
 
 FileManager::~FileManager() {
@@ -112,6 +134,9 @@ int FileManager::create_file(const std::string &name, std::size_t size,
 
     if (chunk_size == 0 || chunk_size % PAGE_SIZE != 0)
         return return_error(-EINVAL, EINVAL, "chunk_size");
+
+    if (!create_directories(path))
+        return return_error(-ENOTDIR, ENOTDIR, "create_directory");
 
     fd = create_fd(path.c_str());
 

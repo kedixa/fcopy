@@ -93,6 +93,8 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
                 if (result.state != coke::STATE_SUCCESS)
                     error = result.error;
 
+                // TODO check error in message
+
                 if (error)
                     break;
             }

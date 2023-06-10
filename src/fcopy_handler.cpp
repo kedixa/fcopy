@@ -52,7 +52,9 @@ coke::Task<int> FcopyHandler::create_file() {
         req.file_name = finfo.remote_file_name;
 
         RemoteTarget &t = finfo.targets[i];
-        error = co_await do_request(t, std::move(req), resp);
+        error = co_await cli.request(t, std::move(req), resp);
+        if (error == 0)
+            error = resp.get_error();
 
         if (error != 0)
             co_return error;
@@ -73,7 +75,9 @@ coke::Task<int> FcopyHandler::create_file() {
         req.targets.push_back(chain_target);
 
         RemoteTarget &t = finfo.targets[i-1];
-        error = co_await do_request(t, std::move(req), resp);
+        error = co_await cli.request(t, std::move(req), resp);
+        if (error == 0)
+            error = resp.get_error();
 
         if (error != 0)
             co_return error;
@@ -95,7 +99,9 @@ coke::Task<int> FcopyHandler::close_file() {
         CloseFileResp resp;
 
         req.file_token = finfo.file_tokens[i];
-        error = co_await do_request(t, std::move(req), resp);
+        error = co_await cli.request(t, std::move(req), resp);
+        if (error == 0)
+            error = resp.get_error();
 
         if (error && first_error == 0)
             first_error = error;
@@ -173,7 +179,9 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
         req.file_token = token;
         req.set_content_view(std::string_view(buf.data(), result.nbytes));
 
-        error = co_await do_request(target, std::move(req), resp);
+        error = co_await cli.request(target, std::move(req), resp);
+        if (error == 0)
+            error = resp.get_error();
         if (error)
             break;
     }
@@ -181,24 +189,4 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
 
 std::string FcopyHandler::get_speed_str() const {
     return format_bps(file_size, send_cost);
-}
-
-template<typename Req, typename Resp>
-coke::Task<int> FcopyHandler::do_request(RemoteTarget target, Req &&req, Resp &resp) {
-    FcopyRequest freq;
-    freq.set_message(std::move(req));
-    FcopyAwaiter::ResultType res = co_await cli.request(target.host, target.port, std::move(freq));
-
-    if (res.state != coke::STATE_SUCCESS)
-        co_return res.error;
-
-    FcopyResponse &fresp = res.resp;
-    MessageBase *msg = fresp.get_message_pointer();
-    Resp *ptr = dynamic_cast<Resp *>(msg);
-
-    if (!ptr)
-        co_return EBADMSG;
-
-    resp = std::move(*ptr);
-    co_return (int)resp.get_error();
 }

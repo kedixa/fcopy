@@ -7,11 +7,6 @@
 
 #include "co_fcopy.h"
 
-struct RemoteTarget {
-    std::string host;
-    unsigned short port;
-};
-
 struct FcopyParams {
     uint16_t compress_type  = 0;
     uint32_t chunk_size     = 4UL * 1024 * 1024;
@@ -52,9 +47,6 @@ public:
     int64_t get_cost_ms() const { return send_cost; }
 
 private:
-    template<typename Req, typename Resp>
-    coke::Task<int> do_request(RemoteTarget target, Req &&req, Resp &resp);
-
     coke::Task<> parallel_send(RemoteTarget target, std::string token);
 
 private:
