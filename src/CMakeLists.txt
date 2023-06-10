@@ -10,6 +10,7 @@ add_executable(fcopy-server
     fcopy_message.cpp
     file_manager.cpp
     co_fcopy.cpp
+    common.cpp
 )
 
 add_executable(fcopy-cli

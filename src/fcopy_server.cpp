@@ -11,6 +11,7 @@
 #include "coke/coke.h"
 #include "co_fcopy.h"
 #include "file_manager.h"
+#include "fcopy_log.h"
 
 FileManager mng;
 FcopyClient cli;
@@ -29,9 +30,9 @@ coke::Task<> handle_create_file(FcopyRequest &freq, FcopyResponse &fresp) {
 
     error = mng.create_file(req->file_name, req->file_size, req->chunk_size, file_token);
 
-    //fprintf(stdout, "CreateFile file:%s size:%zu error:%d token:%s\n",
-    //    req->file_name.c_str(), (std::size_t)req->file_size, error, file_token.c_str()
-    //);
+    FLOG_INFO("CreateFile file:%s size:%zu error:%d token:%s",
+        req->file_name.c_str(), (std::size_t)req->file_size, error, file_token.c_str()
+    );
 
     resp.set_error(error);
     resp.file_token = file_token;
@@ -47,9 +48,9 @@ coke::Task<> handle_close_file(FcopyRequest &freq, FcopyResponse &fresp) {
 
     error = mng.close_file(req->file_token);
 
-    //fprintf(stdout, "CloseFile error:%d token:%s\n",
-    //    error, req->file_token.c_str()
-    //);
+    FLOG_INFO("CloseFile error:%d token:%s",
+        error, req->file_token.c_str()
+    );
 
     resp.set_error(error);
     fresp.set_message(std::move(resp));
@@ -163,14 +164,14 @@ void start_server(int port) {
     FcopyServer server(params, process);
 
     if (server.start(port) == 0) {
-        //fprintf(stdout, "ServerStart port:%d\n", (int)port);
-        //fprintf(stdout, "Press Enter to exit\n");
+        FLOG_INFO("ServerStart port:%d", (int)port);
+        FLOG_INFO("Send SIGINT or SIGTERM to exit");
 
         running.wait(true);
         server.stop();
     }
     else {
-        //fprintf(stdout, "ServerStartFailed error:%d\n", (int)errno);
+        FLOG_ERROR("ServerStartFailed error:%d", (int)errno);
     }
 }
 
@@ -204,10 +205,11 @@ struct option long_opts[] = {
 
 void usage(const char *name) {
     printf(
-        "%s -p listen_port\n\n"
-        "  -p, --port listen_port       start server on `listen port`\n"
-        "  -g, --background             running in the background\n"
-        "  -h, --help                   show this usage\n"
+        "Usage: %s [OPTION]...\n\n"
+        "Options:\n"
+        "  -p, --port listen_port     start server on `listen port`\n"
+        "  -g, --background           running in the background\n"
+        "  -h, --help                 show this usage\n"
     , name);
 }
 
@@ -238,6 +240,9 @@ int main(int argc, char *argv[]) {
 
     if (background)
         daemon();
+    else {
+        fcopy_set_log_stream(stdout);
+    }
 
     start_server(port);
 

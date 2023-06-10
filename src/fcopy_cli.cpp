@@ -1,54 +1,58 @@
 #include <string>
-#include <cstdio>
+#include <filesystem>
 #include <getopt.h>
 
 #include "coke/coke.h"
 #include "fcopy_handler.h"
+#include "fcopy_log.h"
 
-coke::Task<> upload_file(FcopyClient &cli, FcopyParams params) {
+namespace fs = std::filesystem;
+
+coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
     FcopyHandler h(cli, params);
     int error;
 
     error = co_await h.create_file();
     if (error) {
-        fprintf(stdout, "CreateFileError error:%d\n", error);
+        FLOG_ERROR("CreateFileError error:%d", error);
     }
     else {
-        fprintf(stdout, "CreateFileDone file:%s\n", params.file_path.c_str());
+        FLOG_INFO("CreateFileDone file:%s", params.file_path.c_str());
 
         error = co_await h.send_file();
         if (error)
-            fprintf(stdout, "SendFileError error:%d\n", error);
+            FLOG_ERROR("SendFileError error:%d", error);
         else
-            fprintf(stdout, "SendFileDone\n");
+            FLOG_INFO("SendFileDone");
 
         std::string speed_str = h.get_speed_str();
         double cost = h.get_cost_ms();
         cost /= 1000000;
-        fprintf(stdout, "Send Cost:%.4lf Speed:%s\n", cost, speed_str.c_str());
+        FLOG_INFO("Send Cost:%.4lf Speed:%s", cost, speed_str.c_str());
     }
 
     error = co_await h.close_file();
     if (error)
-        fprintf(stdout, "CloseFileError error:%d\n", error);
+        FLOG_ERROR("CloseFileError error:%d", error);
     else
-        fprintf(stdout, "CloseFileDone\n");
+        FLOG_INFO("CloseFileDone");
+
+    co_return error;
 }
 
-const char *opts = "f:t:p:h";
+const char *opts = "t:p:h";
 
 struct option long_opts[] = {
-    {"file", 1, nullptr, 'f'},
-    {"target", 1, nullptr, 't'},
-    {"parallel", 1, nullptr, 'p'},
-    {"help", 0, nullptr, 'h'},
+    {"target",      1, nullptr, 't'},
+    {"parallel",    1, nullptr, 'p'},
+    {"help",        0, nullptr, 'h'},
 };
 
 void usage(const char *name) {
-    fprintf(stdout, "%s -f file -t host:port [-t host:port]...\n\n"
-        "  -f, --file file      send this file to remote server\n"
-        "  -t, --target host:port\n"
-        "  -p, --parallel n     send in parallel, n in [1, 512], default 16\n"
+    fprintf(stdout,
+        "%s [OPTION]... [FILE]...\n\n"
+        "  -t, --target host:port   add a file server target\n"
+        "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n"
         "  -h, --help           show this usage\n"
     , name);
 }
@@ -73,13 +77,11 @@ bool parse_target(std::vector<RemoteTarget> &targets, std::string arg) {
 
 int main(int argc, char *argv[]) {
     std::vector<RemoteTarget> targets;
-    std::string filename;
     int parallel = 1;
     int copt;
 
     while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
         switch (copt) {
-        case 'f': filename.assign(optarg ? optarg : ""); break;
         case 'p': parallel = std::atoi(optarg); break;
         case 't':
             if (!parse_target(targets, optarg ? optarg : ""))
@@ -93,10 +95,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (filename.empty() || targets.empty()) {
+    if (targets.empty()) {
         usage(argv[0]);
         return -1;
     }
+
+    fcopy_set_log_stream(stdout);
 
     if (parallel < 1)
         parallel = 1;
@@ -107,16 +111,28 @@ int main(int argc, char *argv[]) {
     cli_params.retry_max = 2;
 
     FcopyClient cli(cli_params);
+    int error;
 
-    FcopyParams params;
-    params.file_path = filename;
-    params.partition = "";
-    params.remote_file_dir = ".";
-    params.remote_file_name = filename;
-    params.targets = targets;
-    params.parallel = parallel;
+    for (int i = optind; i < argc; i++) {
+        std::string filename(argv[i] ? argv[i] : "");
 
-    coke::sync_wait(upload_file(cli, params));
+        if (!fs::is_regular_file(filename)) {
+            FLOG_ERROR("BadFile file:%s", argv[i]);
+            continue;
+        }
+
+        FcopyParams params;
+        params.file_path = filename;
+        params.partition = "";
+        params.remote_file_dir = ".";
+        params.remote_file_name = filename;
+        params.targets = targets;
+        params.parallel = parallel;
+
+        error = coke::sync_wait(upload_file(cli, params));
+        if (error)
+            break;
+    }
 
     return 0;
 }

@@ -31,6 +31,10 @@ enum class Command : uint16_t {
     SET_CHAIN_RESP      = 0x1011,
 };
 
+enum class Error : int16_t {
+
+};
+
 class MessageBase {
 public:
     static constexpr uint16_t MAGIC         = 0xF1FAU;
