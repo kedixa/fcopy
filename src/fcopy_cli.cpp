@@ -8,6 +8,28 @@
 
 namespace fs = std::filesystem;
 
+enum {
+    WAIT_CLOSE = 1000,
+};
+
+const char *opts = "t:p:h";
+
+struct option long_opts[] = {
+    {"target",      1, nullptr, 't'},
+    {"parallel",    1, nullptr, 'p'},
+    {"wait-close",  0, nullptr, WAIT_CLOSE},
+    {"help",        0, nullptr, 'h'},
+    {nullptr,       0, nullptr, 0},
+};
+
+struct GlobalConfig {
+    int parallel = 1;
+    bool wait_close = false;
+    std::vector<RemoteTarget> targets;
+};
+
+GlobalConfig cfg;
+
 coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
     FcopyHandler h(cli, params);
     int error;
@@ -31,7 +53,7 @@ coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
         FLOG_INFO("Send Cost:%.4lf Speed:%s", cost, speed_str.c_str());
     }
 
-    error = co_await h.close_file();
+    error = co_await h.close_file(cfg.wait_close);
     if (error)
         FLOG_ERROR("CloseFileError error:%d", error);
     else
@@ -40,19 +62,12 @@ coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
     co_return error;
 }
 
-const char *opts = "t:p:h";
-
-struct option long_opts[] = {
-    {"target",      1, nullptr, 't'},
-    {"parallel",    1, nullptr, 'p'},
-    {"help",        0, nullptr, 'h'},
-};
-
 void usage(const char *name) {
     fprintf(stdout,
         "%s [OPTION]... [FILE]...\n\n"
         "  -t, --target host:port   add a file server target\n"
         "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n"
+        "  --wait-close         wait server finish close file, default false\n"
         "  -h, --help           show this usage\n"
     , name);
 }
@@ -75,37 +90,50 @@ bool parse_target(std::vector<RemoteTarget> &targets, std::string arg) {
     return true;
 }
 
-int main(int argc, char *argv[]) {
-    std::vector<RemoteTarget> targets;
-    int parallel = 1;
+int parse_args(int argc, char *argv[]) {
     int copt;
 
     while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
         switch (copt) {
-        case 'p': parallel = std::atoi(optarg); break;
+        case 'p':
+            cfg.parallel = std::atoi(optarg);
+            break;
+
         case 't':
-            if (!parse_target(targets, optarg ? optarg : ""))
-                return -1;
+            if (!parse_target(cfg.targets, optarg ? optarg : ""))
+                return 1;
+            break;
+
+        case WAIT_CLOSE:
+            cfg.wait_close = true;
             break;
 
         case 'h':
         default:
             usage(argv[0]);
-            return 0;
+            exit(0);
         }
     }
 
-    if (targets.empty()) {
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    int ret = parse_args(argc, argv);
+    if (ret != 0)
+        return ret;
+
+    if (cfg.targets.empty()) {
         usage(argv[0]);
-        return -1;
+        return 1;
     }
 
     fcopy_set_log_stream(stdout);
 
-    if (parallel < 1)
-        parallel = 1;
-    else if (parallel > 512)
-        parallel = 512;
+    if (cfg.parallel < 1)
+        cfg.parallel = 1;
+    else if (cfg.parallel > 512)
+        cfg.parallel = 512;
 
     FcopyClientParams cli_params;
     cli_params.retry_max = 2;
@@ -126,8 +154,8 @@ int main(int argc, char *argv[]) {
         params.partition = "";
         params.remote_file_dir = ".";
         params.remote_file_name = filename;
-        params.targets = targets;
-        params.parallel = parallel;
+        params.targets = cfg.targets;
+        params.parallel = cfg.parallel;
 
         error = coke::sync_wait(upload_file(cli, params));
         if (error)

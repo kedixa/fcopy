@@ -30,7 +30,8 @@ static bool create_message(std::unique_ptr<MessageBase> &ptr, Command cmd) {
 template<typename T>
     requires std::is_unsigned_v<T>
 static T byte_swap(T n) {
-    static_assert(std::is_same_v<T, uint16_t> ||
+    static_assert(std::is_same_v<T, uint8_t> ||
+                  std::is_same_v<T, uint16_t> ||
                   std::is_same_v<T, uint32_t> ||
                   std::is_same_v<T, uint64_t>);
 
@@ -293,12 +294,14 @@ int SendFileReq::encode_body(struct iovec vectors[], int max) noexcept {
 
 int CloseFileReq::decode_body() noexcept {
     std::size_t pos = 0;
+    FAIL_IF(decode_int(body, pos, wait_close));
     FAIL_IF(decode_string(body, pos, file_token));
 
     return (pos == body.size()) ? 1 : -1;
 }
 
 int CloseFileReq::encode_body(struct iovec vectors[], int max) noexcept {
+    append_int(body, wait_close);
     append_string(body, file_token);
 
     vectors->iov_base = body.data();

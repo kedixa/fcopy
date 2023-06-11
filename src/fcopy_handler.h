@@ -40,7 +40,7 @@ public:
     }
 
     coke::Task<int> create_file();
-    coke::Task<int> close_file();
+    coke::Task<int> close_file(bool wait_close);
     coke::Task<int> send_file();
 
     std::string get_speed_str() const;

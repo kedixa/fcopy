@@ -180,6 +180,7 @@ protected:
     int encode_body(struct iovec vectors[], int max) noexcept override;
 
 public:
+    uint8_t wait_close {0};
     std::string file_token;
 };
 

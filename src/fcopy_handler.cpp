@@ -86,9 +86,10 @@ coke::Task<int> FcopyHandler::create_file() {
     co_return 0;
 }
 
-coke::Task<int> FcopyHandler::close_file() {
+coke::Task<int> FcopyHandler::close_file(bool wait_close) {
     std::size_t ntarget = finfo.file_tokens.size();
     int first_error = 0;
+    uint8_t wait = wait_close ? 1 : 0;
 
     for (std::size_t i = 0; i < ntarget; i++) {
         if (finfo.file_tokens[i].empty())
@@ -98,6 +99,7 @@ coke::Task<int> FcopyHandler::close_file() {
         CloseFileReq req;
         CloseFileResp resp;
 
+        req.wait_close = wait;
         req.file_token = finfo.file_tokens[i];
         error = co_await cli.request(t, std::move(req), resp);
         if (error == 0)

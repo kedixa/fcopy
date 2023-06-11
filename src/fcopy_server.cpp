@@ -22,56 +22,83 @@ void signal_handler(int sig) {
     running.notify_all();
 }
 
-coke::Task<> handle_create_file(FcopyRequest &freq, FcopyResponse &fresp) {
-    CreateFileReq *req = dynamic_cast<CreateFileReq *>(freq.get_message_pointer());
+coke::Task<> handle_create_file(FcopyServerContext &ctx) {
+    CreateFileReq req;
     CreateFileResp resp;
     std::string file_token;
     int error;
 
-    error = mng.create_file(req->file_name, req->file_size, req->chunk_size, file_token);
+    if (!ctx.get_req().move_message(req))
+        co_return;
+
+    error = mng.create_file(req.file_name, req.file_size, req.chunk_size, file_token);
 
     FLOG_INFO("CreateFile file:%s size:%zu error:%d token:%s",
-        req->file_name.c_str(), (std::size_t)req->file_size, error, file_token.c_str()
+        req.file_name.c_str(), (std::size_t)req.file_size, error, file_token.c_str()
     );
 
     resp.set_error(error);
     resp.file_token = file_token;
-    fresp.set_message(std::move(resp));
+    ctx.get_resp().set_message(std::move(resp));
 
-    co_return;
+    co_await ctx.reply();
 }
 
-coke::Task<> handle_close_file(FcopyRequest &freq, FcopyResponse &fresp) {
-    CloseFileReq *req = dynamic_cast<CloseFileReq *>(freq.get_message_pointer());
+coke::Task<> handle_close_file(FcopyServerContext &ctx) {
+    CloseFileReq req;
     CloseFileResp resp;
+    bool wait;
     int error;
 
-    error = mng.close_file(req->file_token);
+    if (!ctx.get_req().move_message(req))
+        co_return;
 
-    FLOG_INFO("CloseFile error:%d token:%s",
-        error, req->file_token.c_str()
-    );
+    wait = req.wait_close;
+
+    if (wait) {
+        // close file may block, switch to go thread
+        co_await coke::switch_go_thread("close_file");
+        error = mng.close_file(req.file_token);
+    }
+    else {
+        if (mng.has_file(req.file_token))
+            error = 0;
+        else
+            error = -ENOENT;
+    }
 
     resp.set_error(error);
-    fresp.set_message(std::move(resp));
-    co_return;
+    ctx.get_resp().set_message(std::move(resp));
+    co_await ctx.reply();
+
+    if (!wait) {
+        co_await coke::switch_go_thread("close_file");
+        error = mng.close_file(req.file_token);
+    }
+
+    FLOG_INFO("CloseFile error:%d token:%s",
+        error, req.file_token.c_str()
+    );
 }
 
-coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
+coke::Task<> handle_send_file(FcopyServerContext &ctx) {
     std::vector<ChainTarget> targets;
-    SendFileReq *req = dynamic_cast<SendFileReq *>(freq.get_message_pointer());
+    SendFileReq req;
     SendFileResp resp;
     int fd;
 
-    fd = mng.get_fd(req->file_token, targets);
+    if (!ctx.get_req().move_message(req))
+        co_return;
+
+    fd = mng.get_fd(req.file_token, targets);
     if (fd < 0) {
         resp.set_error(-ENOENT);
     }
     else {
-        std::string_view data = req->get_content_view();
+        std::string_view data = req.get_content_view();
         int error = 0;
 
-        if (req->max_chain_len <= 1 && !targets.empty())
+        if (req.max_chain_len <= 1 && !targets.empty())
             error = -ECANCELED;
 
         if (error == 0) {
@@ -79,11 +106,11 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
             for (ChainTarget &target : targets) {
                 SendFileReq sreq;
 
-                sreq.max_chain_len = req->max_chain_len - 1;
+                sreq.max_chain_len = req.max_chain_len - 1;
                 sreq.compress_type = 0;
                 sreq.origin_size = data.size();
                 sreq.crc32 = 0;
-                sreq.offset = req->offset;
+                sreq.offset = req.offset;
                 sreq.file_token = target.file_token;
                 sreq.set_content_view(data);
 
@@ -102,7 +129,7 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
         }
 
         if (error == 0) {
-            auto res = co_await coke::pwrite(fd, (void *)data.data(), data.size(), req->offset);
+            auto res = co_await coke::pwrite(fd, (void *)data.data(), data.size(), req.offset);
 
             if (res.state != coke::STATE_SUCCESS)
                 error = res.error;
@@ -111,50 +138,50 @@ coke::Task<> handle_send_file(FcopyRequest &freq, FcopyResponse &fresp) {
         resp.set_error(error);
     }
 
-    fresp.set_message(std::move(resp));
+    ctx.get_resp().set_message(std::move(resp));
     co_return;
 }
 
-coke::Task<> handle_set_chain(FcopyRequest &freq, FcopyResponse &fresp) {
-    SetChainReq *req = dynamic_cast<SetChainReq *>(freq.get_message_pointer());
+coke::Task<> handle_set_chain(FcopyServerContext &ctx) {
+    SetChainReq req;
     SetChainResp resp;
     int error;
 
-    error = mng.set_chain_targets(req->file_token, req->targets);
+    if (!ctx.get_req().move_message(req))
+        co_return;
+
+    error = mng.set_chain_targets(req.file_token, req.targets);
     resp.set_error(error);
 
-    fresp.set_message(std::move(resp));
+    ctx.get_resp().set_message(std::move(resp));
     co_return;
 }
 
 coke::Task<> process(FcopyServerContext ctx) {
-    FcopyRequest &req = ctx.get_req();
-    FcopyResponse &resp = ctx.get_resp();
-    Command cmd = req.get_command();
+    Command cmd = ctx.get_req().get_command();
+    ctx.get_resp().set_message(MessageBase(Command::UNKNOWN));
 
     switch (cmd) {
     case Command::CREATE_FILE_REQ:
-        co_await handle_create_file(req, resp);
+        co_await handle_create_file(ctx);
         break;
 
     case Command::CLOSE_FILE_REQ:
-        co_await handle_close_file(req, resp);
+        co_await handle_close_file(ctx);
         break;
 
     case Command::SEND_FILE_REQ:
-        co_await handle_send_file(req, resp);
+        co_await handle_send_file(ctx);
         break;
 
     case Command::SET_CHAIN_REQ:
-        co_await handle_set_chain(req, resp);
+        co_await handle_set_chain(ctx);
         break;
 
     default:
-        resp.set_message(MessageBase(Command::UNKNOWN));
+        co_await ctx.reply();
         break;
     }
-
-    co_await ctx.reply();
 }
 
 void start_server(int port) {

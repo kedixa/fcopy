@@ -202,6 +202,11 @@ int FileManager::set_chain_targets(const std::string &file_token, const std::vec
     return 0;
 }
 
+bool FileManager::has_file(const std::string &file_token) const {
+    std::lock_guard<std::mutex> lg(this->mtx);
+    return fmap.contains(file_token);
+}
+
 int FileManager::get_fd(const std::string &file_token, std::vector<ChainTarget> &targets) {
     std::lock_guard<std::mutex> lg(this->mtx);
     auto it = fmap.find(file_token);

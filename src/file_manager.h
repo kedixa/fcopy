@@ -38,6 +38,7 @@ public:
                     std::size_t chunk_size, std::string &file_token);
     int close_file(const std::string &file_token);
     int set_chain_targets(const std::string &file_token, const std::vector<ChainTarget> &targets);
+    bool has_file(const std::string &file_token) const;
 
     int get_fd(const std::string &file_token, std::vector<ChainTarget> &targets);
     int set_range(const std::string &file_token, long offset, long length);
@@ -45,7 +46,7 @@ public:
 private:
     std::map<std::string, FileInfo> fmap;
     std::map<std::string, std::string> token_map;  // filepath -> token
-    std::mutex mtx;
+    mutable std::mutex mtx;
 };
 
 #endif // FRIDIS_FILE_MANAGER_H
