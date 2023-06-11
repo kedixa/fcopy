@@ -208,9 +208,9 @@ int CreateFileResp::encode_body(struct iovec vectors[], int max) noexcept {
 }
 
 SendFileReq::SendFileReq(SendFileReq &&that)
-    : MessageBase(std::move(that)), compress_type(that.compress_type),
-    origin_size(that.origin_size), crc32(that.crc32), offset(that.offset),
-    file_token(std::move(that.file_token))
+    : MessageBase(std::move(that)), max_chain_len(that.max_chain_len),
+    compress_type(that.compress_type), origin_size(that.origin_size),
+    crc32(that.crc32), offset(that.offset), file_token(std::move(that.file_token))
 {
     move_content_view(std::move(that));
 }
@@ -219,6 +219,7 @@ SendFileReq &SendFileReq::operator= (SendFileReq &&that) noexcept {
     if (this != &that) {
         MessageBase::operator=(std::move(that));
 
+        max_chain_len = that.max_chain_len;
         compress_type = that.compress_type;
         origin_size = that.origin_size;
         crc32 = that.crc32;
