@@ -1,4 +1,5 @@
 #include <string>
+#include <string_view>
 #include <cstdlib>
 #include <cstdio>
 #include <csignal>
@@ -13,8 +14,15 @@
 #include "file_manager.h"
 #include "fcopy_log.h"
 
+FcopyClientParams client_params {
+    .retry_max           = 2,
+    .send_timeout        = -1,
+    .receive_timeout     = -1,
+    .keep_alive_timeout  = 60 * 1000,
+};
+
 FileManager mng;
-FcopyClient cli;
+FcopyClient cli(client_params);
 std::atomic<bool> running{true};
 
 void signal_handler(int sig) {
@@ -81,6 +89,72 @@ coke::Task<> handle_close_file(FcopyServerContext &ctx) {
     );
 }
 
+coke::Task<int> send_one(const RemoteTarget &target, SendFileReq req) {
+    SendFileResp resp;
+    std::string token;
+    int error;
+
+    token = req.file_token;
+    error = co_await cli.request(target, std::move(req), resp);
+    if (error == 0)
+        error = resp.get_error();
+
+    if (error == 0) {
+        FLOG_INFO("ChainSendSuccess host:%s port:%u token:%s",
+            target.host.c_str(), (unsigned)target.port, token.c_str()
+        );
+    }
+    else {
+        FLOG_ERROR("ChainSendFailed host:%s port:%u token:%s error:%d",
+            target.host.c_str(), (unsigned)target.port, token.c_str(), error
+        );
+    }
+
+    co_return error;
+}
+
+coke::Task<> send_chain(SendFileReq &req, const std::vector<ChainTarget> &targets,
+                        std::vector<int> &errors)
+{
+    std::size_t size = targets.size();
+    std::string_view data = req.get_content_view();
+    std::vector<coke::Task<int>> tasks;
+
+    tasks.reserve(size);
+
+    for (std::size_t i = 0; i < size; i++) {
+        const ChainTarget &target = targets[i];
+        SendFileReq s;
+        RemoteTarget t;
+
+        s.max_chain_len = req.max_chain_len - 1;
+        s.compress_type = req.compress_type;
+        s.origin_size = req.origin_size;
+        s.crc32 = req.crc32;
+        s.offset = req.offset;
+        s.file_token = target.file_token;
+        s.set_content_view(data);
+
+        t.host = target.host;
+        t.port = target.port;
+
+        tasks.push_back(send_one(t, std::move(s)));
+    }
+
+    errors = co_await coke::async_wait(std::move(tasks));
+    co_return;
+}
+
+coke::Task<> write_file(int fd, std::string_view data, uint64_t offset, int &error) {
+    coke::FileResult res;
+    res = co_await coke::pwrite(fd, (void *)data.data(), data.size(), offset);
+    if (res.state != coke::STATE_SUCCESS)
+        error = res.error;
+    else
+        error = 0;
+    co_return;
+}
+
 coke::Task<> handle_send_file(FcopyServerContext &ctx) {
     std::vector<ChainTarget> targets;
     SendFileReq req;
@@ -91,49 +165,32 @@ coke::Task<> handle_send_file(FcopyServerContext &ctx) {
         co_return;
 
     fd = mng.get_fd(req.file_token, targets);
-    if (fd < 0) {
+    if (fd < 0)
         resp.set_error(-ENOENT);
-    }
+    else if (req.max_chain_len <= 1 && !targets.empty())
+        resp.set_error(-ECANCELED);
     else {
         std::string_view data = req.get_content_view();
+        std::vector<int> chain_errors;
+        int write_error;
+
+        co_await coke::async_wait(
+            send_chain(req, targets, chain_errors),
+            write_file(fd, data, req.offset, write_error)
+        );
+
+        // get first error
         int error = 0;
 
-        if (req.max_chain_len <= 1 && !targets.empty())
-            error = -ECANCELED;
-
-        if (error == 0) {
-            // write chain, can be parallelized here
-            for (ChainTarget &target : targets) {
-                SendFileReq sreq;
-
-                sreq.max_chain_len = req.max_chain_len - 1;
-                sreq.compress_type = 0;
-                sreq.origin_size = data.size();
-                sreq.crc32 = 0;
-                sreq.offset = req.offset;
-                sreq.file_token = target.file_token;
-                sreq.set_content_view(data);
-
-                FcopyRequest fsreq;
-                fsreq.set_message(std::move(sreq));
-
-                FcopyAwaiter::ResultType result = co_await cli.request(target.host, target.port, std::move(fsreq));
-                if (result.state != coke::STATE_SUCCESS)
-                    error = result.error;
-
-                // TODO check error in message
-
-                if (error)
-                    break;
+        for (int err : chain_errors) {
+            if (err != 0) {
+                error = err;
+                break;
             }
         }
 
-        if (error == 0) {
-            auto res = co_await coke::pwrite(fd, (void *)data.data(), data.size(), req.offset);
-
-            if (res.state != coke::STATE_SUCCESS)
-                error = res.error;
-        }
+        if (error == 0)
+            error = write_error;
 
         resp.set_error(error);
     }

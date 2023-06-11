@@ -259,6 +259,12 @@ public:
         return Command::UNKNOWN;
     }
 
+    int get_error() const {
+        if (message)
+            return message->get_error();
+        return 0;
+    }
+
     MessageBase *get_message_pointer() {
         return message.get();
     }
