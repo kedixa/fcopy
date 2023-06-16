@@ -6,19 +6,19 @@ set(ALL_TARGETS
 )
 
 add_executable(fcopy-server
-    fcopy_server.cpp
-    fcopy_message.cpp
-    file_manager.cpp
-    co_fcopy.cpp
-    common.cpp
+    common/fcopy_message.cpp
+    common/co_fcopy.cpp
+    common/utils.cpp
+    server/file_manager.cpp
+    server/fcopy_server.cpp
 )
 
 add_executable(fcopy-cli
-    fcopy_cli.cpp
-    fcopy_message.cpp
-    co_fcopy.cpp
-    fcopy_handler.cpp
-    common.cpp
+    common/fcopy_message.cpp
+    common/co_fcopy.cpp
+    common/utils.cpp
+    client/fcopy_handler.cpp
+    client/fcopy_cli.cpp
 )
 
 install(TARGETS ${ALL_TARGETS}
@@ -26,6 +26,12 @@ install(TARGETS ${ALL_TARGETS}
 )
 
 foreach(target ${ALL_TARGETS})
+    target_include_directories(${target} PRIVATE
+        common
+        client
+        server
+    )
+
     target_link_directories(${target} PRIVATE
         ${WORKFLOW_LIB_DIR}
         ${COKE_LIBRARY_DIR}

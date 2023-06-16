@@ -3,7 +3,8 @@
 #include <sys/stat.h>
 
 #include "fcopy_handler.h"
-#include "common.h"
+#include "structures.h"
+#include "utils.h"
 
 #include "coke/global.h"
 #include "coke/fileio.h"

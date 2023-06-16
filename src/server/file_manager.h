@@ -1,5 +1,5 @@
-#ifndef FRIDIS_FILE_MANAGER_H
-#define FRIDIS_FILE_MANAGER_H
+#ifndef FCOPY_FILE_MANAGER_H
+#define FCOPY_FILE_MANAGER_H
 
 #include <string>
 #include <vector>
@@ -7,7 +7,7 @@
 #include <vector>
 #include <map>
 
-#include "common.h"
+#include "structures.h"
 
 struct FileInfo {
     int fd;
@@ -49,4 +49,4 @@ private:
     mutable std::mutex mtx;
 };
 
-#endif // FRIDIS_FILE_MANAGER_H
+#endif // FCOPY_FILE_MANAGER_H

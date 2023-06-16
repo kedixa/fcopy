@@ -7,7 +7,7 @@
 #include <vector>
 #include <memory>
 
-#include "common.h"
+#include "structures.h"
 #include "workflow/ProtocolMessage.h"
 
 // chunk_size should be multiple of FCOPY_CHUNK_BASE
