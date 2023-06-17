@@ -91,7 +91,7 @@ static unsigned char *mmap_and_clear(const char *path, int size) {
 
     if (fd > 0) {
         if (ftruncate(fd, size) == 0) {
-            addr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_LOCKED, fd, 0);
+            addr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
             close(fd);
 
             if (addr != MAP_FAILED) {
