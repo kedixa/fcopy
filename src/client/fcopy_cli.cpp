@@ -9,22 +9,22 @@
 namespace fs = std::filesystem;
 
 enum {
-    WAIT_CLOSE = 1000,
+    NO_WAIT_CLOSE = 1000,
 };
 
 const char *opts = "t:p:h";
 
 struct option long_opts[] = {
-    {"target",      1, nullptr, 't'},
-    {"parallel",    1, nullptr, 'p'},
-    {"wait-close",  0, nullptr, WAIT_CLOSE},
-    {"help",        0, nullptr, 'h'},
-    {nullptr,       0, nullptr, 0},
+    {"target",          1, nullptr, 't'},
+    {"parallel",        1, nullptr, 'p'},
+    {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
+    {"help",            0, nullptr, 'h'},
+    {nullptr,           0, nullptr, 0},
 };
 
 struct GlobalConfig {
     int parallel = 1;
-    bool wait_close = false;
+    bool wait_close = true;
     std::vector<RemoteTarget> targets;
 };
 
@@ -67,7 +67,7 @@ void usage(const char *name) {
         "%s [OPTION]... [FILE]...\n\n"
         "  -t, --target host:port   add a file server target\n"
         "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n"
-        "  --wait-close         wait server finish close file, default false\n"
+        "  --no-wait-close      not wait server finish close file, default wait\n"
         "  -h, --help           show this usage\n"
     , name);
 }
@@ -104,8 +104,8 @@ int parse_args(int argc, char *argv[]) {
                 return 1;
             break;
 
-        case WAIT_CLOSE:
-            cfg.wait_close = true;
+        case NO_WAIT_CLOSE:
+            cfg.wait_close = false;
             break;
 
         case 'h':
