@@ -7,15 +7,19 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "structures.h"
 #include "fcopy_log.h"
 #include "service.h"
 
+FcopyConfig conf;
 std::unique_ptr<FcopyService> service;
-const char *opts = "gp:h";
+
+const char *opts = "c:ghp:";
 struct option long_opts[] = {
-    {"background", 0, nullptr, 'g'},
-    {"port", 1, nullptr, 'p'},
-    {"help", 0, nullptr, 'h'},
+    {"config",      1, nullptr, 'c'},
+    {"background",  0, nullptr, 'g'},
+    {"port",        1, nullptr, 'p'},
+    {"help",        0, nullptr, 'h'},
 };
 
 void signal_handler(int sig) {
@@ -41,10 +45,14 @@ void daemon() {
     }
 }
 
+int load_service_config(const std::string &filepath, FcopyConfig &p,
+                        std::string &err);
+
 void usage(const char *name) {
     printf(
         "Usage: %s [OPTION]...\n\n"
         "Options:\n"
+        "  -c, --config conf_file     path of config file, default ~/.fcopy/fcopy.conf\n"
         "  -p, --port listen_port     start server on `listen port`\n"
         "  -g, --background           running in the background\n"
         "  -h, --help                 show this usage\n"
@@ -52,31 +60,53 @@ void usage(const char *name) {
 }
 
 int main(int argc, char *argv[]) {
-    FcopyServiceParams params;
+    std::string conf_file;
+    std::string err;
     int copt;
-    int background = 0;
-
-    params.port = 0;
-    params.cli_params.retry_max = 3;
+    int ret;
 
     while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
-        switch (copt) {
-        case 'p': params.port = std::atoi(optarg); break;
-        case 'g': background = 1; break;
-
-        case 'h':
-        default:
+        if (copt == 'c' && optarg) {
+            conf_file.assign(optarg);
+        }
+        else if (copt == '?') {
             usage(argv[0]);
-            return 0;
+            return -1;
         }
     }
 
-    if (params.port == 0) {
+    if (!conf_file.empty()) {
+        ret = load_service_config(conf_file, conf, err);
+        if (ret != 0) {
+            // We didn't have log file now
+            fprintf(stderr, "%s\n", err.c_str());
+            return ret;
+        }
+    }
+
+    optind = 1;
+    while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
+        switch (copt) {
+        case 'c': break;
+        case 'p': conf.port = std::atoi(optarg); break;
+        case 'g': conf.daemonize = true; break;
+
+        case 'h':
+            usage(argv[0]);
+            return 0;
+
+        default:
+            usage(argv[0]);
+            return -1;
+        }
+    }
+
+    if (conf.port < 1 || conf.port > 65535) {
         usage(argv[0]);
         return 1;
     }
 
-    if (background)
+    if (conf.daemonize)
         daemon();
     else {
         fcopy_set_log_stream(stdout);
@@ -85,7 +115,18 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    int ret;
+    FcopyServiceParams params;
+    params.port = conf.port;
+    params.srv_params.max_connections = conf.srv_max_conn;
+    params.srv_params.peer_response_timeout = conf.srv_peer_response_timeout;
+    params.srv_params.receive_timeout = conf.srv_receive_timeout;
+    params.srv_params.keep_alive_timeout = conf.srv_keep_alive_timeout;
+    params.srv_params.request_size_limit = conf.srv_request_size_limit;
+    params.cli_params.retry_max = conf.cli_retry_max;
+    params.cli_params.send_timeout = conf.cli_send_timeout;
+    params.cli_params.receive_timeout = conf.cli_receive_timeout;
+    params.cli_params.keep_alive_timeout = conf.cli_keep_alive_timeout;
+
     service = std::make_unique<FcopyService>(params);
     ret = service->start();
     if (ret == 0) {

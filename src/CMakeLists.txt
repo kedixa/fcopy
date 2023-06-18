@@ -9,6 +9,7 @@ add_executable(fcopy-server
     common/fcopy_message.cpp
     common/co_fcopy.cpp
     common/utils.cpp
+    server/load_config.cpp
     server/file_manager.cpp
     server/service.cpp
     server/fcopy_server.cpp

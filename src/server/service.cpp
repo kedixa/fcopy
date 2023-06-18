@@ -26,7 +26,7 @@ coke::Task<int> send_one(FcopyClient &cli, const RemoteTarget &target, SendFileR
         error = resp.get_error();
 
     if (error == 0) {
-        FLOG_INFO("ChainSendSuccess host:%s port:%u token:%s",
+        FLOG_DEBUG("ChainSendSuccess host:%s port:%u token:%s",
             target.host.c_str(), (unsigned)target.port, token.c_str()
         );
     }
@@ -74,11 +74,11 @@ coke::Task<> send_chain(FcopyClient &cli, SendFileReq &origin,
 int FcopyService::start() {
     int ret;
     WFServerParams srv_params = SERVER_PARAMS_DEFAULT;
-    srv_params.max_connections = params.server_params.max_connections;
-    srv_params.peer_response_timeout = params.server_params.peer_response_timeout;
-    srv_params.receive_timeout = params.server_params.receive_timeout;
-    srv_params.keep_alive_timeout = params.server_params.keep_alive_timeout;
-    srv_params.request_size_limit = params.server_params.request_size_limit;
+    srv_params.max_connections = params.srv_params.max_connections;
+    srv_params.peer_response_timeout = params.srv_params.peer_response_timeout;
+    srv_params.receive_timeout = params.srv_params.receive_timeout;
+    srv_params.keep_alive_timeout = params.srv_params.keep_alive_timeout;
+    srv_params.request_size_limit = params.srv_params.request_size_limit;
 
     FcopyProcessor processor = [this](FcopyServerContext ctx) -> coke::Task<> {
         co_await this->process(std::move(ctx));

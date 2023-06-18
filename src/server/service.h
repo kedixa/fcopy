@@ -21,7 +21,7 @@ struct FcopyServerParams {
 struct FcopyServiceParams {
     int port;
 
-    FcopyServerParams server_params;
+    FcopyServerParams srv_params;
     FcopyClientParams cli_params;
 };
 
