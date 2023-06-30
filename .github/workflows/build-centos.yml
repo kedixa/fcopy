@@ -1,0 +1,42 @@
+on:
+  workflow_dispatch:
+
+env:
+  wf_sha: a7785020dfdd3a770048de9c805dd9455d42b390
+
+jobs:
+  build-centos7:
+    name: centos7
+    runs-on: ubuntu-22.04
+    container:
+      image: centos:centos7.9.2009
+    steps:
+    - name: Prepare
+      run: |
+        yum install --nogpgcheck -y epel-release centos-release-scl
+        yum install --nogpgcheck -y devtoolset-11-gcc devtoolset-11-gcc-c++ openssl openssl-devel git cmake3
+    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+      with:
+          repository: sogou/workflow
+          ref: ${{ env.wf_sha }}
+          path: workflow
+    - uses: actions/checkout@v3
+      with:
+          repository: kedixa/coke
+          ref: master
+          path: coke
+    - name: Build
+      run: |
+        scl enable devtoolset-11 "cmake3 -S workflow -B build.workflow -D CMAKE_CXX_STANDARD=20"
+        scl enable devtoolset-11 "make -C build.workflow -j 8"
+        scl enable devtoolset-11 "cmake3 -S coke -B build.coke -D Workflow_DIR=../workflow"
+        scl enable devtoolset-11 "make -C build.coke -j 8"
+        scl enable devtoolset-11 "cmake3 -S . -B build.cmake -D Workflow_DIR=workflow -D Coke_DIR=build.coke"
+        scl enable devtoolset-11 "make -C build.cmake -j 8"
+        mkdir fcopy-centos7
+        cp build.cmake/fcopy-cli build.cmake/fcopy-server fcopy-centos7
+    - uses: actions/upload-artifact@v3
+      with:
+        name: fcopy-centos7
+        path: fcopy-centos7
