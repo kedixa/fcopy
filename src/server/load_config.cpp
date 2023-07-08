@@ -4,6 +4,7 @@
 #include <cctype>
 #include <limits>
 #include <map>
+#include <cmath>
 
 #include "structures.h"
 #include "fcopy_log.h"
@@ -126,9 +127,11 @@ parse_size(std::size_t *p, const std::vector<std::string> &args) {
         return -1;
 
     std::size_t pos = 0;
-    unsigned long long u, m = 1;
+    long double u = 0;
+    int m = 1;
+
     try {
-        u = std::stoull(args[0], &pos);
+        u = std::stold(args[0], &pos);
     }
     catch (const std::exception &) {
         return -1;
@@ -145,10 +148,30 @@ parse_size(std::size_t *p, const std::vector<std::string> &args) {
         }
     }
 
-    *p = static_cast<std::size_t>(u) << m;
-    if ((*p >> m) != static_cast<std::size_t>(u))
+    u *= std::exp2l(m);
+    u = std::ceil(u);
+    if (!std::isfinite(u) || u < 0 || u > std::exp2l(50.0))
         return -1;
 
+    *p = static_cast<std::size_t>(u);
+    return 0;
+}
+
+static int
+parse_string(std::string *p, const std::vector<std::string> &args) {
+    if (p == nullptr || args.size() != 1)
+        return -1;
+
+    *p = args[0];
+    return 0;
+}
+
+static int
+parse_partition(std::map<std::string, FsPartition> *p, const std::vector<std::string> &args) {
+    if (p == nullptr || args.size() != 2)
+        return -1;
+
+    p->insert({args[0], FsPartition{args[0], args[1]}});
     return 0;
 }
 
@@ -169,9 +192,11 @@ int load_service_config(const std::string &filepath, FcopyConfig &p,
     config_map_t<int> int_map;
     config_map_t<std::size_t> size_map;
     config_map_t<std::size_t> cap_map;
+    config_map_t<std::string> str_map;
 
     config_map_t<int>::iterator int_it;
     config_map_t<std::size_t>::iterator size_it, cap_it;
+    config_map_t<std::string>::iterator str_it;
 
     int_map.emplace("port", &p.port);
     int_map.emplace("srv_max_conn", &p.srv_max_conn);
@@ -183,7 +208,12 @@ int load_service_config(const std::string &filepath, FcopyConfig &p,
     int_map.emplace("cli-receive-timeout", &p.cli_receive_timeout);
     int_map.emplace("cli-keep-alive-timeout", &p.cli_keep_alive_timeout);
 
-    cap_map.emplace("request-size-limit", &p.srv_request_size_limit);
+    cap_map.emplace("request-size-limit", &p.srv_size_limit);
+
+    str_map.emplace("logfile", &p.logfile);
+    str_map.emplace("pidfile", &p.pidfile);
+    str_map.emplace("basedir", &p.basedir);
+    str_map.emplace("default-partition", &p.default_partition);
 
     while (std::getline(ifs, line)) {
         ret = parse_line(line, key, args);
@@ -203,11 +233,18 @@ int load_service_config(const std::string &filepath, FcopyConfig &p,
             ret = parse_unsigned<std::size_t>(size_it->second, args);
         else if ((cap_it = cap_map.find(key)) != cap_map.end())
             ret = parse_size(cap_it->second, args);
+        else if ((str_it = str_map.find(key)) != str_map.end())
+            ret = parse_string(str_it->second, args);
+        else if (key == "partitions")
+            ret = parse_partition(&p.partitions, args);
         else
             ret = 0;
 
-        if (ret < 0)
+        if (ret < 0) {
+            err.assign("Parse config failed line:").append(std::to_string(lineno))
+                .append(" key:").append(key);
             return -1;
+        }
     }
 
     return 0;
