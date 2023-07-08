@@ -2,6 +2,7 @@
 #define FCOPY_LOG_H
 
 #include <cstdio>
+#include <cerrno>
 
 constexpr inline int FCOPY_LOG_LEVEL_ERROR  = 5;
 constexpr inline int FCOPY_LOG_LEVEL_WARN   = 4;
@@ -30,7 +31,9 @@ inline void fcopy_close_log_file() {
 inline int fcopy_open_log_file(const char *filename) {
     fcopy_log_file = std::fopen(filename, "a");
     if (fcopy_log_file == nullptr)
-        return -1;
+        return errno;
+
+    setbuf(fcopy_log_file, NULL);
     return 0;
 }
 
