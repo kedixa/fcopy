@@ -39,7 +39,7 @@ public:
         send_cost = 0;
     }
 
-    coke::Task<int> create_file();
+    coke::Task<int> create_file(bool direct_io);
     coke::Task<int> close_file(bool wait_close);
     coke::Task<int> send_file();
 

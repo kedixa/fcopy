@@ -15,6 +15,7 @@ enum {
     NO_WAIT_CLOSE = 1000,
     TARGET_LIST   = 1001,
     DRY_RUN       = 1002,
+    NO_DIRECT_IO  = 1003,
 };
 
 const char *opts = "t:p:hv";
@@ -25,6 +26,7 @@ struct option long_opts[] = {
     {"parallel",        1, nullptr, 'p'},
     {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
     {"dry-run",         0, nullptr, DRY_RUN},
+    {"no-direct-io",    0, nullptr, NO_DIRECT_IO},
     {"verbose",         0, nullptr, 'v'},
     {"help",            0, nullptr, 'h'},
     {nullptr,           0, nullptr, 0},
@@ -35,6 +37,7 @@ struct GlobalConfig {
     int verbose = 0;
     bool dry_run = false;
     bool wait_close = true;
+    bool direct_io = true;
     std::vector<RemoteTarget> targets;
     std::vector<FileDesc> files;
 };
@@ -45,7 +48,7 @@ coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
     FcopyHandler h(cli, params);
     int error;
 
-    error = co_await h.create_file();
+    error = co_await h.create_file(cfg.direct_io);
     if (error) {
         FLOG_ERROR("CreateFileError error:%d", error);
     }
@@ -81,7 +84,8 @@ void usage(const char *name) {
         "                       read target in `file`, one host:port per line\n"
         "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n"
         "  --no-wait-close      not wait server finish close file, default wait\n"
-        "  --dry-run            parse parameters, determine file, but do not perform the upload.\n"
+        "  --dry-run            parse parameters, determine file, but do not perform the upload\n"
+        "  --no-direct-io       disable direct io when read file\n"
         "  -v, --verbose        show more details\n"
         "  -h, --help           show this usage\n"
     , name);
@@ -176,6 +180,10 @@ int parse_args(int argc, char *argv[]) {
             cfg.dry_run = true;
             break;
 
+        case NO_DIRECT_IO:
+            cfg.direct_io = false;
+            break;
+
         case 'h':
         default:
             usage(argv[0]);
@@ -219,6 +227,13 @@ int main(int argc, char *argv[]) {
 
     if (cfg.dry_run)
         return 0;
+
+    // coke global init
+    coke::GlobalSettings settings;
+    settings.endpoint_params.max_connections = 1024;
+    settings.poller_threads = 8;
+    settings.handler_threads = 12;
+    coke::library_init(settings);
 
     FcopyClientParams cli_params;
     cli_params.retry_max = 2;

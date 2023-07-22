@@ -1,3 +1,5 @@
+#include <cstdlib>
+#include <memory>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -10,22 +12,26 @@
 #include "coke/fileio.h"
 #include "coke/wait.h"
 
-static int open_file(const char *fn, uint64_t &file_size) {
+static int open_file(const char *fn, uint64_t &file_size, int flag) {
     struct stat file_stat;
     int fd;
 
     if (stat(fn, &file_stat) != 0)
         return -1;
 
-    fd = open(fn, O_RDONLY);
+    fd = open(fn, flag);
     file_size = file_stat.st_size;
 
     return fd;
 }
 
-coke::Task<int> FcopyHandler::create_file() {
+coke::Task<int> FcopyHandler::create_file(bool direct_io) {
+    int iflag = O_RDONLY;
+    if (direct_io)
+        iflag |= O_DIRECT;
+
     if (finfo.fd < 0)
-        finfo.fd = open_file(finfo.file_path.c_str(), finfo.file_size);
+        finfo.fd = open_file(finfo.file_path.c_str(), finfo.file_size, iflag);
 
     if (finfo.fd < 0) {
         error = errno;
@@ -150,9 +156,14 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
     std::size_t file_size = finfo.file_size;
     int fd = finfo.fd;
 
-    std::vector<char> buf(chunk_size, 0);
     std::size_t cur_off;
     coke::FileResult result;
+
+    void *buf = std::aligned_alloc(FCOPY_CHUNK_BASE, chunk_size);
+    if (buf == nullptr) {
+        error = errno;
+        co_return;
+    }
 
     while (error == 0) {
         {
@@ -165,7 +176,7 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
                 break;
         }
 
-        result = co_await coke::pread(fd, buf.data(), chunk_size, cur_off);
+        result = co_await coke::pread(fd, buf, chunk_size, cur_off);
         if (result.state != coke::STATE_SUCCESS) {
             error = result.error;
             break;
@@ -180,14 +191,17 @@ coke::Task<> FcopyHandler::parallel_send(RemoteTarget target, std::string token)
         req.crc32 = 0;
         req.offset = cur_off;
         req.file_token = token;
-        req.set_content_view(std::string_view(buf.data(), result.nbytes));
+        req.set_content_view(static_cast<const char *>(buf), result.nbytes);
 
         error = co_await cli.request(target, std::move(req), resp);
         if (error == 0)
             error = resp.get_error();
+
         if (error)
             break;
     }
+
+    std::free(buf);
 }
 
 std::string FcopyHandler::get_speed_str() const {
