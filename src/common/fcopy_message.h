@@ -36,10 +36,14 @@ enum class Error : int16_t {
 };
 
 class MessageBase {
+    struct DataDeleter {
+        void operator()(void *data) { std::free(data); }
+    };
+
 public:
     static constexpr uint16_t MAGIC         = 0xF1FAU;
     static constexpr uint16_t VERSION       = 1U;
-    static constexpr uint16_t HEADER_SIZE   = 12U;
+    static constexpr uint16_t HEADER_SIZE   = 16U;
 
 public:
     explicit MessageBase(Command cmd = Command::UNKNOWN, int16_t error = 0);
@@ -52,6 +56,9 @@ public:
     Command get_command() const { return static_cast<Command>(command); }
     void set_error(int16_t error) { this->error = error; }
     int16_t get_error() const { return error; }
+
+    bool set_data(const std::string_view &d);
+    bool set_data_view(const std::string_view &v);
 
 protected:
     int encode_head(std::string &head) noexcept;
@@ -69,8 +76,12 @@ protected:
     uint16_t command;
     int16_t error;
     uint32_t body_len;
+    uint32_t data_len;
 
+    uint32_t data_pos;
     std::string body;
+    std::unique_ptr<char, DataDeleter> data;
+    std::string_view data_view;
 };
 
 class CreateFileReq : public MessageBase {
@@ -117,31 +128,35 @@ public:
     constexpr static Command ThisCmd = Command::SEND_FILE_REQ;
 
     SendFileReq() : MessageBase(ThisCmd) { }
-    SendFileReq(SendFileReq &&);
-    SendFileReq &operator= (SendFileReq &&) noexcept;
 
-    void set_content(std::string content) {
-        content_copy = std::move(content);
-        content_view = content_copy;
-        local_view = true;
+    bool set_content(const std::string &content) {
+        std::string_view v(content.data(), content.size());
+        return set_data(v);
     }
 
-    void set_content_view(std::string_view content) {
-        content_view = content;
-        content_copy.clear();
-        local_view = false;
+    bool set_content(const std::string_view &content) {
+        return set_data(content);
+    }
+
+    bool set_content(const char *s, std::size_t size) {
+        return set_content(std::string_view(s, size));
+    }
+
+    bool set_content_view(const std::string_view &content) {
+        return set_data_view(content);
+    }
+
+    bool set_content_view(const char *s, std::size_t size) {
+        return set_content_view(std::string_view(s, size));
     }
 
     std::string_view get_content_view() const {
-        return content_view;
+        return data_view;
     }
 
 protected:
     int decode_body() noexcept override;
     int encode_body(struct iovec vectors[], int max) noexcept override;
-
-private:
-    void move_content_view(SendFileReq &&that) noexcept;
 
 public:
     uint16_t max_chain_len = 0;
@@ -150,12 +165,6 @@ public:
     uint32_t crc32         = 0;
     uint64_t offset        = 0;
     std::string file_token;
-
-private:
-    // local_view means the data in `content_view` is stored in `content_copy`
-    std::string_view content_view;
-    bool local_view = false;
-    std::string content_copy;
 };
 
 class SendFileResp : public MessageBase {

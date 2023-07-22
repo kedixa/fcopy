@@ -1,7 +1,8 @@
+#include <bit>
 #include <utility>
 #include <cerrno>
 #include <cstring>
-#include <bit>
+#include <cstdlib>
 #include <type_traits>
 
 #include "fcopy_message.h"
@@ -106,6 +107,38 @@ MessageBase::MessageBase(Command cmd, int16_t error) {
     this->command   = static_cast<uint16_t>(cmd);
     this->error     = error;
     this->body_len  = 0;
+    this->data_len  = 0;
+    this->data_pos  = 0;
+}
+
+bool MessageBase::set_data(const std::string_view &d) {
+    void *buf;
+    data_pos = d.size();
+    data_len = d.size();
+    data.reset();
+
+    if (d.empty()) {
+        data_view = std::string_view();
+    }
+    else {
+        buf = std::aligned_alloc(FCOPY_CHUNK_BASE, d.size());
+        if (!buf)
+            return false;
+
+        std::memcpy(buf, d.data(), d.size());
+        data.reset(reinterpret_cast<char *>(buf));
+        data_view = std::string_view(data.get(), d.size());
+    }
+
+    return true;
+}
+
+bool MessageBase::set_data_view(const std::string_view &d) {
+    data_pos = d.size();
+    data_len = d.size();
+    data.reset();
+    data_view = d;
+    return true;
 }
 
 int MessageBase::encode_head(std::string &head) noexcept {
@@ -116,6 +149,7 @@ int MessageBase::encode_head(std::string &head) noexcept {
     append_int(head, command);
     append_int(head, error);
     append_int(head, body_len);
+    append_int(head, data_len);
 
     if (head.size() != HEADER_SIZE)
         return -1;
@@ -134,6 +168,7 @@ int MessageBase::decode_head(const std::string &head) noexcept {
     decode_int(head, pos, command);
     decode_int(head, pos, error);
     decode_int(head, pos, body_len);
+    decode_int(head, pos, data_len);
 
     if (pos != head.size() || magic != MAGIC || version != VERSION)
         return -1;
@@ -142,16 +177,41 @@ int MessageBase::decode_head(const std::string &head) noexcept {
 }
 
 int MessageBase::append_body(const char *buf, size_t size) noexcept {
-    if (body.capacity() < body_len)
-        body.reserve(body_len);
+    std::size_t n;
 
     if (body.size() < body_len) {
-        std::size_t n = std::min(size, body_len - body.size());
+        if (body.capacity() < body_len)
+            body.reserve(body_len);
+
+        n = std::min(size, body_len - body.size());
         body.append(buf, n);
+        buf += n;
+        size -= n;
+
+        if (body.size() < body_len)
+            return 0;
     }
 
-    if (body.size() < body_len)
-        return 0;
+    if (data_pos < data_len) {
+        char *p = data.get();
+
+        if (!p) {
+            p = static_cast<char *>(std::aligned_alloc(FCOPY_CHUNK_BASE, data_len));
+            data.reset(p);
+
+            if (!p)
+                return -1;
+        }
+
+        n = std::min<std::size_t>(size, data_len - data_pos);
+        std::memcpy(p + data_pos, buf, n);
+        data_pos += n;
+
+        if (data_pos < data_len)
+            return 0;
+
+        data_view = std::string_view(data.get(), data_len);
+    }
 
     return decode_body();
 }
@@ -207,53 +267,8 @@ int CreateFileResp::encode_body(struct iovec vectors[], int max) noexcept {
     return 1;
 }
 
-SendFileReq::SendFileReq(SendFileReq &&that)
-    : MessageBase(std::move(that)), max_chain_len(that.max_chain_len),
-    compress_type(that.compress_type), origin_size(that.origin_size),
-    crc32(that.crc32), offset(that.offset), file_token(std::move(that.file_token))
-{
-    move_content_view(std::move(that));
-}
-
-SendFileReq &SendFileReq::operator= (SendFileReq &&that) noexcept {
-    if (this != &that) {
-        MessageBase::operator=(std::move(that));
-
-        max_chain_len = that.max_chain_len;
-        compress_type = that.compress_type;
-        origin_size = that.origin_size;
-        crc32 = that.crc32;
-        offset = that.offset;
-        file_token = std::move(that.file_token);
-
-        move_content_view(std::move(that));
-    }
-
-    return *this;
-}
-
-void SendFileReq::move_content_view(SendFileReq &&that) noexcept {
-    if (that.local_view) {
-        std::size_t start = that.content_view.data() - that.content_copy.data();
-        std::size_t size = that.content_view.size();
-
-        content_copy = std::move(that.content_copy);
-        content_view = std::string_view(content_copy.data() + start, size);
-        local_view = true;
-    }
-    else {
-        content_view = that.content_view;
-        local_view = false;
-    }
-
-    that.content_view = std::string_view();
-    that.local_view = false;
-    that.content_copy.clear();
-}
-
 int SendFileReq::decode_body() noexcept {
     std::size_t pos = 0;
-    uint32_t content_len;
 
     FAIL_IF(decode_int(body, pos, max_chain_len));
     FAIL_IF(decode_int(body, pos, compress_type));
@@ -262,34 +277,25 @@ int SendFileReq::decode_body() noexcept {
     FAIL_IF(decode_int(body, pos, offset));
     FAIL_IF(decode_string(body, pos, file_token));
 
-    FAIL_IF(decode_int(body, pos, content_len));
-
-    if (pos + content_len == body.size()) {
-        content_copy = std::move(body);
-        content_view = std::string_view(content_copy.data() + pos, content_len);
-        local_view = true;
-        return 1;
-    }
-
-    return -1;
+    return (pos == body.size()) ? 1 : -1;
 }
 
 int SendFileReq::encode_body(struct iovec vectors[], int max) noexcept {
-    uint32_t content_len = content_view.size();
-
     append_int(body, max_chain_len);
     append_int(body, compress_type);
     append_int(body, origin_size);
     append_int(body, crc32);
     append_int(body, offset);
     append_string(body, file_token);
-    append_int(body, content_len);
 
     vectors[0].iov_base = body.data();
     vectors[0].iov_len = body.size();
-    vectors[1].iov_base = const_cast<char *>(content_view.data());
-    vectors[1].iov_len = content_view.size();
 
+    if (data_view.empty())
+        return 1;
+
+    vectors[1].iov_base = const_cast<char *>(data_view.data());
+    vectors[1].iov_len = data_view.size();
     return 2;
 }
 
@@ -379,7 +385,7 @@ int FcopyMessage::encode(struct iovec vectors[], int max) {
     for (int i = 1; i <= ret; i++)
         blen += vectors[i].iov_len;
 
-    message->body_len = static_cast<uint32_t>(blen);
+    message->body_len = static_cast<uint32_t>(blen-message->data_len);
 
     head.clear();
     message->encode_head(head);
@@ -411,7 +417,7 @@ int FcopyMessage::append(const void *buf, size_t size) {
             return -1;
         }
 
-        if (m.body_len > get_size_limit()) {
+        if (m.body_len + m.data_len + HSIZE > get_size_limit()) {
             errno = EMSGSIZE;
             return -1;
         }
