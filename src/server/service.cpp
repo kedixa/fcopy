@@ -170,7 +170,7 @@ coke::Task<> FcopyService::handle_create_file(FcopyServerContext &ctx) {
         error = get_abs_path(partition_dir, req.relative_path, req.file_name, abs_path);
 
     if (error == 0)
-        error = mng->create_file(abs_path, req.file_size, req.chunk_size, file_token);
+        error = mng->create_file(abs_path, req.file_size, req.chunk_size, params.directio, file_token);
 
     FLOG_INFO("CreateFile file:%s size:%zu error:%d token:%s",
         abs_path.c_str(), (std::size_t)req.file_size, error, file_token.c_str()

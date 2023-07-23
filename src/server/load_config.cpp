@@ -74,6 +74,21 @@ parse_line(const std::string &line, std::string &key, std::vector<std::string> &
     return 1;
 }
 
+static int
+parse_bool(bool *flag, const std::vector<std::string> &args) {
+    if (flag == nullptr || args.size() != 1)
+        return -1;
+
+    const std::string &str = args[0];
+    if (str == "yes")
+        *flag = true;
+    else if (str == "no")
+        *flag = false;
+    else
+        return -1;
+    return 0;
+}
+
 template<typename T>
 static int
 parse_unsigned(T *p, const std::vector<std::string> &args) {
@@ -189,14 +204,19 @@ int load_service_config(const std::string &filepath, FcopyConfig &p,
         return -1;
     }
 
+    config_map_t<bool> bool_map;
     config_map_t<int> int_map;
     config_map_t<std::size_t> size_map;
     config_map_t<std::size_t> cap_map;
     config_map_t<std::string> str_map;
 
+    config_map_t<bool>::iterator bool_it;
     config_map_t<int>::iterator int_it;
     config_map_t<std::size_t>::iterator size_it, cap_it;
     config_map_t<std::string>::iterator str_it;
+
+    bool_map.emplace("daemonize", &p.daemonize);
+    bool_map.emplace("directio", &p.directio);
 
     int_map.emplace("port", &p.port);
     int_map.emplace("srv_max_conn", &p.srv_max_conn);
@@ -235,6 +255,8 @@ int load_service_config(const std::string &filepath, FcopyConfig &p,
             ret = parse_size(cap_it->second, args);
         else if ((str_it = str_map.find(key)) != str_map.end())
             ret = parse_string(str_it->second, args);
+        else if ((bool_it = bool_map.find(key)) != bool_map.end())
+            ret = parse_bool(bool_it->second, args);
         else if (key == "partitions")
             ret = parse_partition(&p.partitions, args);
         else

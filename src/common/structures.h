@@ -17,7 +17,8 @@ struct FsPartition {
 };
 
 struct FcopyConfig {
-    bool daemonize = false;
+    bool daemonize  = false;
+    bool directio   = true;
 
     int port        = 5200;
     int loglevel    = 0;

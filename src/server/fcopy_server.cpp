@@ -178,6 +178,7 @@ int main(int argc, char *argv[]) {
         FLOG_INFO("StartWithConfig %s", conf.conffile.data());
 
     FcopyServiceParams params;
+    params.directio = conf.directio;
     params.port = conf.port;
     params.srv_params.max_connections = conf.srv_max_conn;
     params.srv_params.peer_response_timeout = conf.srv_peer_response_timeout;

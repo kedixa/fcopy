@@ -35,7 +35,7 @@ public:
     ~FileManager();
 
     int create_file(const std::string &name, std::size_t size,
-                    std::size_t chunk_size, std::string &file_token);
+                    std::size_t chunk_size, bool directio, std::string &file_token);
     int close_file(const std::string &file_token);
     int set_chain_targets(const std::string &file_token, const std::vector<ChainTarget> &targets);
     bool has_file(const std::string &file_token) const;

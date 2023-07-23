@@ -20,6 +20,8 @@ struct FcopyServerParams {
 };
 
 struct FcopyServiceParams {
+    bool directio;
+
     int port;
     std::string default_partition;
     std::map<std::string, FsPartition> partitions;

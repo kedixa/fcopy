@@ -73,8 +73,8 @@ FileManager::~FileManager() {
     }
 }
 
-static int create_fd(const char *path) {
-    int fd = open(path, O_CREAT|O_RDWR, 0660);
+static int create_fd(const char *path, int flag, int mode) {
+    int fd = open(path, flag, mode);
     if (fd > 0) {
         if (ftruncate(fd, 0) == 0)
             return fd;
@@ -108,7 +108,7 @@ static unsigned char *mmap_and_clear(const char *path, int size) {
 
 constexpr std::size_t PAGE_SIZE = 8 * 1024;
 int FileManager::create_file(const std::string &name, std::size_t size,
-                             std::size_t chunk_size,
+                             std::size_t chunk_size, bool directio,
                              std::string &file_token)
 {
     std::string path = get_full_path(name);
@@ -118,6 +118,11 @@ int FileManager::create_file(const std::string &name, std::size_t size,
     std::size_t meta_size;
     std::size_t meta_bits;
     int fd = -1;
+    int oflag = O_CREAT | O_RDWR;
+    int mode = 0660;
+
+    if (directio)
+        oflag |= O_DIRECT;
 
     auto return_error = [&] (int ret, int error, const char *type) mutable {
         file_token.assign("Error: ").append(type)
@@ -138,7 +143,7 @@ int FileManager::create_file(const std::string &name, std::size_t size,
     if (!create_directories(path))
         return return_error(-ENOTDIR, ENOTDIR, "create_directory");
 
-    fd = create_fd(path.c_str());
+    fd = create_fd(path.c_str(), oflag, mode);
 
     if (fd < 0)
         return return_error(-errno, errno, "create_file");
