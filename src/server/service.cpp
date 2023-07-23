@@ -1,5 +1,7 @@
 #include "service.h"
 
+#include <cstdlib>
+#include <cstring>
 #include "utils.h"
 #include "coke/coke.h"
 #include "fcopy_log.h"
@@ -7,12 +9,32 @@
 static
 coke::Task<> write_file(int fd, std::string_view data, uint64_t offset, int &error) {
     coke::FileResult res;
-    res = co_await coke::pwrite(fd, (void *)data.data(), data.size(), offset);
+    void *pdata = (void *)data.data();
+    std::size_t psize = data.size();
+
+    if (psize % FCOPY_CHUNK_BASE != 0) {
+        // last unaligned chunk
+        psize += FCOPY_CHUNK_BASE;
+        psize = psize / FCOPY_CHUNK_BASE * FCOPY_CHUNK_BASE;
+        pdata = std::aligned_alloc(FCOPY_CHUNK_BASE, psize);
+
+        if (pdata == nullptr) {
+            error = errno;
+            co_return;
+        }
+
+        memcpy(pdata, data.data(), data.size());
+        memset((char *)pdata + data.size(), 0, psize - data.size());
+    }
+
+    res = co_await coke::pwrite(fd, pdata, psize, offset);
     if (res.state != coke::STATE_SUCCESS)
         error = res.error;
     else
         error = 0;
-    co_return;
+
+    if (pdata != data.data())
+        std::free(pdata);
 }
 
 static

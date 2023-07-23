@@ -191,6 +191,7 @@ int FileManager::close_file(const std::string &file_token) {
         fmap.erase(it);
     }
 
+    ftruncate(info.fd, info.total_size);
     close(info.fd);
     munmap(info.meta_ptr, info.meta_size);
     fs::remove(info.meta_path, ec);
