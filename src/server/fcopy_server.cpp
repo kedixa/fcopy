@@ -171,6 +171,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // coke global init
+    coke::GlobalSettings settings;
+    settings.endpoint_params.max_connections = 2048;
+    settings.poller_threads = 8;
+    settings.handler_threads = 12;
+    coke::library_init(settings);
+
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
