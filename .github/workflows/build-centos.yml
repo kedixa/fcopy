@@ -2,7 +2,8 @@ on:
   workflow_dispatch:
 
 env:
-  wf_sha: a7785020dfdd3a770048de9c805dd9455d42b390
+  wf_tag: v0.10.8
+  coke_sha: f4a2d2b1305e5b6414f3343f401000caec08d3b6
 
 jobs:
   build-centos7:
@@ -19,12 +20,12 @@ jobs:
     - uses: actions/checkout@v3
       with:
           repository: sogou/workflow
-          ref: ${{ env.wf_sha }}
+          ref: ${{ env.wf_tag }}
           path: workflow
     - uses: actions/checkout@v3
       with:
           repository: kedixa/coke
-          ref: master
+          ref: ${{ env.coke_sha }}
           path: coke
     - name: Build
       run: |
