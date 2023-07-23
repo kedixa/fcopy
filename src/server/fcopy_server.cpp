@@ -10,6 +10,7 @@
 #include "structures.h"
 #include "fcopy_log.h"
 #include "service.h"
+#include "utils.h"
 
 FcopyConfig conf;
 std::unique_ptr<FcopyService> service;
@@ -59,15 +60,17 @@ void usage(const char *name) {
     , name);
 }
 
-int main(int argc, char *argv[]) {
-    std::string conf_file;
+int init_config(int argc, char *argv[]) {
+    std::string conffile;
+    std::string basedir;
     std::string err;
     int copt;
     int ret;
 
+    // find config in args
     while ((copt = getopt_long(argc, argv, opts, long_opts, nullptr)) != -1) {
         if (copt == 'c' && optarg) {
-            conf_file.assign(optarg);
+            conffile.assign(optarg);
         }
         else if (copt == '?') {
             usage(argv[0]);
@@ -75,8 +78,18 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (!conf_file.empty()) {
-        ret = load_service_config(conf_file, conf, err);
+    // try to find default config
+    basedir = default_basedir();
+    if (conffile.empty() && !basedir.empty()) {
+        conffile = basedir + "/fcopy.conf";
+        if (!is_regular_file(conffile))
+            conffile.clear();
+    }
+
+    // load config
+    if (!conffile.empty()) {
+        conf.conffile = conffile;
+        ret = load_service_config(conffile, conf, err);
         if (ret != 0) {
             // We didn't have log file now
             fprintf(stderr, "%s\n", err.c_str());
@@ -93,7 +106,7 @@ int main(int argc, char *argv[]) {
 
         case 'h':
             usage(argv[0]);
-            return 0;
+            std::exit(0);
 
         default:
             usage(argv[0]);
@@ -101,19 +114,68 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (conf.basedir.empty())
+        conf.basedir = basedir;
+    else
+        basedir = conf.basedir;
+
+    std::string tmp;
+
+    if (!conf.logfile.empty()) {
+        ret = get_abs_path(basedir, conf.logfile, tmp);
+        if (ret == 0)
+            conf.logfile = tmp;
+        else
+            return 1;
+    }
+
+    if (!conf.pidfile.empty()) {
+        ret = get_abs_path(basedir, conf.pidfile, tmp);
+        if (ret == 0)
+            conf.pidfile = tmp;
+        else
+            return 1;
+    }
+
+    if (conf.default_partition.empty())
+        conf.default_partition = current_dir();
+
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    int ret = init_config(argc, argv);
+    if (ret != 0)
+        return ret;
+
     if (conf.port < 1 || conf.port > 65535) {
         usage(argv[0]);
         return 1;
     }
+    // TODO check all configs
 
     if (conf.daemonize)
         daemon();
+
+    if (conf.logfile.empty()) {
+        if (!conf.daemonize)
+            fcopy_set_log_stream(stdout);
+    }
     else {
-        fcopy_set_log_stream(stdout);
+        ret = create_dirs(conf.logfile, true);
+        if (ret == 0)
+            ret = fcopy_open_log_file(conf.logfile.c_str());
+        if (ret != 0) {
+            printf("StartFailed logfile:%s error:%d\n", conf.logfile.c_str(), ret);
+            return ret;
+        }
     }
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+
+    if (!conf.conffile.empty())
+        FLOG_INFO("StartWithConfig %s", conf.conffile.data());
 
     FcopyServiceParams params;
     params.port = conf.port;
@@ -121,19 +183,29 @@ int main(int argc, char *argv[]) {
     params.srv_params.peer_response_timeout = conf.srv_peer_response_timeout;
     params.srv_params.receive_timeout = conf.srv_receive_timeout;
     params.srv_params.keep_alive_timeout = conf.srv_keep_alive_timeout;
-    params.srv_params.request_size_limit = conf.srv_request_size_limit;
+    params.srv_params.request_size_limit = conf.srv_size_limit;
     params.cli_params.retry_max = conf.cli_retry_max;
     params.cli_params.send_timeout = conf.cli_send_timeout;
     params.cli_params.receive_timeout = conf.cli_receive_timeout;
     params.cli_params.keep_alive_timeout = conf.cli_keep_alive_timeout;
 
+    params.default_partition = conf.default_partition;
+    params.partitions = conf.partitions;
+
     service = std::make_unique<FcopyService>(params);
     ret = service->start();
     if (ret == 0) {
         service->wait();
+
+        FLOG_INFO("ExitSignal received");
         service->stop();
     }
+
     service.reset();
+    FLOG_INFO("Quit");
+
+    if (!conf.logfile.empty())
+        fcopy_close_log_file();
 
     return ret;
 }

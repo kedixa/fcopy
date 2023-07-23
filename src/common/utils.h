@@ -6,12 +6,6 @@
 #include <chrono>
 #include <vector>
 
-int64_t current_usec();
-
-std::string format_bps(std::size_t size, int64_t usec);
-
-// fs utils
-
 struct FileDesc {
     std::string name;
     std::string dir;
@@ -20,9 +14,22 @@ struct FileDesc {
     std::size_t size;
 };
 
-std::string default_basedir();
-bool is_regular_file(const std::string &path);
+int64_t current_usec();
 
+std::string format_bps(std::size_t size, int64_t usec);
+
+// fs utils
+
+// no exception
+std::string default_basedir();
+std::string current_dir();
+bool is_regular_file(const std::string &path);
+int get_abs_path(const std::string &base, const std::string &relative, std::string &abs_path);
+int get_abs_path(const std::string &base, const std::string &relative,
+                 const std::string &filename, std::string &abs_path);
+int create_dirs(const std::string &path, bool remove_filename);
+
+// may throw exception
 void load_files(const std::vector<std::string> &paths, std::vector<FileDesc> &files);
 
 #endif // FCOPY_UTILS_H

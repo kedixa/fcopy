@@ -64,9 +64,52 @@ std::string default_basedir() {
     return basedir;
 }
 
+std::string current_dir() {
+    std::error_code ec;
+    fs::path cur = fs::current_path(ec);
+
+    return ec ? std::string() : cur.string();
+}
+
 bool is_regular_file(const std::string &path) {
     std::error_code ec;
     return fs::is_regular_file(path, ec);
+}
+
+int get_abs_path(const std::string &base, const std::string &relative, std::string &abs_path) {
+    std::error_code ec;
+    fs::path p(base), q;
+    p /= relative;
+    q = fs::absolute(p, ec);
+
+    if (!ec)
+        abs_path = q.string();
+    return ec.value();
+}
+
+int get_abs_path(const std::string &base, const std::string &relative,
+                 const std::string &filename, std::string &abs_path) {
+    std::error_code ec;
+    fs::path p(base), q;
+    p /= relative;
+    p /= filename;
+    q = fs::absolute(p, ec);
+
+    if (!ec)
+        abs_path = q.string();
+    return ec.value();
+}
+
+
+int create_dirs(const std::string &path, bool remove_filename) {
+    std::error_code ec;
+    fs::path p(path);
+
+    if (remove_filename)
+        p.remove_filename();
+
+    fs::create_directories(p, ec);
+    return ec.value();
 }
 
 struct LoadState {

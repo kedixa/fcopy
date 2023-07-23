@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <map>
 
 #include "co_fcopy.h"
 #include "file_manager.h"
@@ -20,6 +21,8 @@ struct FcopyServerParams {
 
 struct FcopyServiceParams {
     int port;
+    std::string default_partition;
+    std::map<std::string, FsPartition> partitions;
 
     FcopyServerParams srv_params;
     FcopyClientParams cli_params;
@@ -42,6 +45,8 @@ private:
     coke::Task<> handle_close_file(FcopyServerContext &ctx);
     coke::Task<> handle_send_file(FcopyServerContext &ctx);
     coke::Task<> handle_set_chain(FcopyServerContext &ctx);
+
+    std::string get_partition_dir(const std::string &partition);
 
 private:
     std::atomic<bool> running{false};

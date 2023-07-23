@@ -1,5 +1,6 @@
 #include "service.h"
 
+#include "utils.h"
 #include "coke/coke.h"
 #include "fcopy_log.h"
 
@@ -80,6 +81,11 @@ int FcopyService::start() {
     srv_params.keep_alive_timeout = params.srv_params.keep_alive_timeout;
     srv_params.request_size_limit = params.srv_params.request_size_limit;
 
+    if (params.default_partition.empty()) {
+        FLOG_ERROR("ServerStartFailed no default_partition");
+        return -1;
+    }
+
     FcopyProcessor processor = [this](FcopyServerContext ctx) -> coke::Task<> {
         co_await this->process(std::move(ctx));
     };
@@ -150,15 +156,24 @@ coke::Task<> FcopyService::handle_create_file(FcopyServerContext &ctx) {
     CreateFileReq req;
     CreateFileResp resp;
     std::string file_token;
+    std::string partition_dir;
+    std::string abs_path;
     int error;
 
     if (!ctx.get_req().move_message(req))
         co_return;
 
-    error = mng->create_file(req.file_name, req.file_size, req.chunk_size, file_token);
+    partition_dir = get_partition_dir(req.partition);
+    if (partition_dir.empty())
+        error = -1;
+    else
+        error = get_abs_path(partition_dir, req.relative_path, req.file_name, abs_path);
+
+    if (error == 0)
+        error = mng->create_file(abs_path, req.file_size, req.chunk_size, file_token);
 
     FLOG_INFO("CreateFile file:%s size:%zu error:%d token:%s",
-        req.file_name.c_str(), (std::size_t)req.file_size, error, file_token.c_str()
+        abs_path.c_str(), (std::size_t)req.file_size, error, file_token.c_str()
     );
 
     resp.set_error(error);
@@ -262,4 +277,15 @@ coke::Task<> FcopyService::handle_set_chain(FcopyServerContext &ctx) {
 
     ctx.get_resp().set_message(std::move(resp));
     co_return;
+}
+
+std::string FcopyService::get_partition_dir(const std::string &partition) {
+    if (partition.empty())
+        return params.default_partition;
+
+    auto it = params.partitions.find(partition);
+    if (it == params.partitions.end())
+        return std::string();
+
+    return it->second.root_path;
 }
