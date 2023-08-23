@@ -11,15 +11,11 @@
 
 struct FileInfo {
     int fd;
-    unsigned char *meta_ptr;
     std::size_t chunk_size;
-    std::size_t meta_size; // in bytes
-    std::size_t meta_bits; // max valid bits
     std::size_t total_size; // total file size(bytes)
     std::string file_name;
     std::string file_path;
     std::string file_token;
-    std::string meta_path; // path for meta info file
 
     std::vector<ChainTarget> targets;
 };

@@ -64,8 +64,8 @@ private:
 };
 
 template<typename RequestMsg, typename ResponseMsg>
-coke::Task<int>FcopyClient::request(const RemoteTarget &target,
-                                    RequestMsg &&req, ResponseMsg &resp) noexcept
+coke::Task<int> FcopyClient::request(const RemoteTarget &target,
+                                     RequestMsg &&req, ResponseMsg &resp) noexcept
 {
     FcopyRequest freq;
     freq.set_message(std::move(req));

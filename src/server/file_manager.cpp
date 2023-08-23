@@ -64,12 +64,9 @@ bool is_subpath(const std::string &base, const std::string &path) {
 FileManager::FileManager() { }
 
 FileManager::~FileManager() {
-    std::error_code ec;
     for (auto it : fmap) {
-        FileInfo &info = it.second;
+        const FileInfo &info = it.second;
         close(info.fd);
-        munmap(info.meta_ptr, info.meta_size);
-        fs::remove(info.meta_path, ec);
     }
 }
 
@@ -113,10 +110,6 @@ int FileManager::create_file(const std::string &name, std::size_t size,
 {
     std::string path = get_full_path(name);
     std::string token = get_token(path);
-    std::string meta_path = get_full_path(token + ".meta");
-    unsigned char *meta_ptr = nullptr;
-    std::size_t meta_size;
-    std::size_t meta_bits;
     int fd = -1;
     int oflag = O_CREAT | O_RDWR;
     int mode = 0660;
@@ -130,9 +123,6 @@ int FileManager::create_file(const std::string &name, std::size_t size,
 
         if (fd >= 0)
             close(fd);
-
-        if (meta_ptr)
-            munmap(meta_ptr, meta_size);
 
         return ret;
     };
@@ -148,24 +138,12 @@ int FileManager::create_file(const std::string &name, std::size_t size,
     if (fd < 0)
         return return_error(-errno, errno, "create_file");
 
-    meta_bits = (size + chunk_size - 1) / chunk_size;
-    meta_size = (meta_bits + 7) / 8;
-    meta_size += PAGE_SIZE - (meta_size % PAGE_SIZE);
-    meta_ptr = mmap_and_clear(meta_path.c_str(), meta_size);
-
-    if (!meta_ptr)
-        return return_error(-errno, errno, "mmap_meta");
-
     FileInfo info;
     info.fd = fd;
-    info.meta_ptr = meta_ptr;
-    info.meta_size = meta_size;
-    info.meta_bits = meta_bits;
     info.total_size = size;
     info.file_name = name;
     info.file_path = path;
     info.file_token = token;
-    info.meta_path = meta_path;
 
     std::lock_guard<std::mutex> lg(this->mtx);
     auto it = fmap.find(token);
@@ -180,7 +158,6 @@ int FileManager::create_file(const std::string &name, std::size_t size,
 
 int FileManager::close_file(const std::string &file_token) {
     FileInfo info;
-    std::error_code ec;
     {
         std::lock_guard<std::mutex> lg(this->mtx);
         auto it = fmap.find(file_token);
@@ -193,8 +170,6 @@ int FileManager::close_file(const std::string &file_token) {
 
     ftruncate(info.fd, info.total_size);
     close(info.fd);
-    munmap(info.meta_ptr, info.meta_size);
-    fs::remove(info.meta_path, ec);
     return 0;
 }
 
