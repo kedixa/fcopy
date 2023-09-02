@@ -19,6 +19,7 @@ add_executable(fcopy-cli
     common/fcopy_message.cpp
     common/co_fcopy.cpp
     common/utils.cpp
+    common/localaddr.cpp
     client/fcopy_handler.cpp
     client/fcopy_cli.cpp
 )

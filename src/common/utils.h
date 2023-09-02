@@ -18,6 +18,8 @@ int64_t current_usec();
 
 std::string format_bps(std::size_t size, int64_t usec);
 
+bool get_local_addr(std::vector<std::string> &addrs);
+
 // fs utils
 
 // no exception

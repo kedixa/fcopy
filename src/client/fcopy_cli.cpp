@@ -1,4 +1,6 @@
 #include <string>
+#include <vector>
+#include <set>
 #include <fstream>
 #include <filesystem>
 #include <getopt.h>
@@ -12,10 +14,15 @@
 namespace fs = std::filesystem;
 
 enum {
-    NO_WAIT_CLOSE = 1000,
-    TARGET_LIST   = 1001,
-    DRY_RUN       = 1002,
-    NO_DIRECT_IO  = 1003,
+    TARGET_LIST     = 0x0101,
+    DRY_RUN         = 0x0102,
+
+    NO_WAIT_CLOSE   = 0x0200,
+    WAIT_CLOSE      = 0x0201,
+    NO_DIRECT_IO    = 0x0202,
+    DIRECT_IO       = 0x0203,
+    NO_CHECK_SELF   = 0x0204,
+    CHECK_SELF      = 0x0205,
 };
 
 const char *opts = "t:p:hv";
@@ -24,9 +31,13 @@ struct option long_opts[] = {
     {"target",          1, nullptr, 't'},
     {"target-list",     1, nullptr, TARGET_LIST},
     {"parallel",        1, nullptr, 'p'},
-    {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
     {"dry-run",         0, nullptr, DRY_RUN},
+    {"wait-close",      0, nullptr, WAIT_CLOSE},
+    {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
+    {"direct-io",       0, nullptr, DIRECT_IO},
     {"no-direct-io",    0, nullptr, NO_DIRECT_IO},
+    {"check-self",      0, nullptr, CHECK_SELF},
+    {"no-check-self",   0, nullptr, NO_CHECK_SELF},
     {"verbose",         0, nullptr, 'v'},
     {"help",            0, nullptr, 'h'},
     {nullptr,           0, nullptr, 0},
@@ -38,11 +49,43 @@ struct GlobalConfig {
     bool dry_run = false;
     bool wait_close = true;
     bool direct_io = true;
+    bool check_self = true;
     std::vector<RemoteTarget> targets;
     std::vector<FileDesc> files;
 };
 
 GlobalConfig cfg;
+
+bool do_check_self() {
+    std::vector<std::string> addrs;
+    if (!get_local_addr(addrs)) {
+        FLOG_ERROR("GetLocalAddr Failed errno:%d", (int)errno);
+        return false;
+    }
+
+    std::set<std::string> addrs_set(addrs.begin(), addrs.end());
+
+    for (const auto &target : cfg.targets) {
+        if (addrs_set.find(target.host) != addrs_set.end()) {
+            FLOG_ERROR("Cannot send to self %s, close this feature with --no-check-self",
+                target.host.c_str());
+            return false;
+        }
+    }
+
+    std::set<std::string> targets_set;
+    for (const auto &target : cfg.targets) {
+        std::string str = target.host + ":" + std::to_string(target.port);
+        if (targets_set.find(str) != targets_set.end()) {
+            FLOG_ERROR("Cannot send to duplicate target %s", str.c_str());
+            return false;
+        }
+
+        targets_set.insert(str);
+    }
+
+    return true;
+}
 
 coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
     FcopyHandler h(cli, params);
@@ -79,15 +122,22 @@ coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
 void usage(const char *name) {
     fprintf(stdout,
         "%s [OPTION]... [FILE]...\n\n"
-        "  -t, --target host:port   add a file server target\n"
+        "  -t, --target host:port\n"
+        "                       add a file server target\n"
         "  --target-list file\n"
-        "                       read target in `file`, one host:port per line\n"
-        "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n"
-        "  --no-wait-close      not wait server finish close file, default wait\n"
-        "  --dry-run            parse parameters, determine file, but do not perform the upload\n"
-        "  --no-direct-io       disable direct io when read file\n"
+        "                       read target in `file`, one host:port per line\n\n"
+        "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n\n"
+        "  --wait-close, --no-wait-close\n"
+        "                       whether wait server finish close file, default wait\n\n"
+        "  --direct-io, --no-direct-io\n"
+        "                       enable/disable direct io when read file, default enable\n\n"
+        "  --check-self, --no-check-self\n"
+        "                       enable/disable check, Abort transfer if targets include\n"
+        "                       self or duplicate, default enable\n\n"
+        "  --dry-run            parse parameters, determine file, but do not perform the\n"
+        "                       upload\n\n"
         "  -v, --verbose        show more details\n"
-        "  -h, --help           show this usage\n"
+        "  -h, --help           show this page\n"
     , name);
 }
 
@@ -163,27 +213,23 @@ int parse_args(int argc, char *argv[]) {
             }
             break;
 
-        case 'v':
-            ++cfg.verbose;
-            break;
-
         case TARGET_LIST:
             if (!parse_targets(cfg.targets, arg))
                 return 1;
             break;
 
-        case NO_WAIT_CLOSE:
-            cfg.wait_close = false;
-            break;
+        case DRY_RUN: cfg.dry_run = true; break;
 
-        case DRY_RUN:
-            cfg.dry_run = true;
-            break;
+        case WAIT_CLOSE:    cfg.wait_close = true; break;
+        case NO_WAIT_CLOSE: cfg.wait_close = false; break;
 
-        case NO_DIRECT_IO:
-            cfg.direct_io = false;
-            break;
+        case DIRECT_IO:     cfg.direct_io = true; break;
+        case NO_DIRECT_IO:  cfg.direct_io = false; break;
 
+        case CHECK_SELF:    cfg.check_self = true; break;
+        case NO_CHECK_SELF: cfg.check_self = false; break;
+
+        case 'v': ++cfg.verbose; break;
         case 'h':
         default:
             usage(argv[0]);
@@ -224,6 +270,9 @@ int main(int argc, char *argv[]) {
         cfg.parallel = 1;
     else if (cfg.parallel > 512)
         cfg.parallel = 512;
+
+    if (cfg.check_self && !do_check_self())
+        return -1;
 
     if (cfg.dry_run)
         return 0;
