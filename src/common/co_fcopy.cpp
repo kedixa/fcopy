@@ -2,7 +2,6 @@
 
 #include "workflow/WFTaskFactory.h"
 
-using FcopyTask = WFNetworkTask<FcopyRequest, FcopyResponse>;
 using fcopy_callback_t = std::function<void (FcopyTask *)>;
 
 FcopyTask *create_fcopy_task(const std::string &host, unsigned short port,

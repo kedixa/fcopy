@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <type_traits>
 
-#include "fcopy_message.h"
+#include "message.h"
 
 static bool create_message(std::unique_ptr<MessageBase> &ptr, Command cmd) {
     switch (cmd) {

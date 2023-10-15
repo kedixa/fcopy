@@ -6,7 +6,7 @@ set(ALL_TARGETS
 )
 
 add_executable(fcopy-server
-    common/fcopy_message.cpp
+    common/message.cpp
     common/co_fcopy.cpp
     common/utils.cpp
     server/load_config.cpp
@@ -16,7 +16,7 @@ add_executable(fcopy-server
 )
 
 add_executable(fcopy-cli
-    common/fcopy_message.cpp
+    common/message.cpp
     common/co_fcopy.cpp
     common/utils.cpp
     common/localaddr.cpp

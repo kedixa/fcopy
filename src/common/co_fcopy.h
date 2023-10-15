@@ -1,12 +1,11 @@
 #ifndef FCOPY_TASK_H
 #define FCOPY_TASK_H
 
-#include "fcopy_message.h"
+#include "message.h"
 #include "coke/network.h"
 #include "coke/detail/task.h"
 #include "coke/global.h"
-
-#include "workflow/WFServer.h"
+#include "coke/basic_server.h"
 
 struct FcopyClientParams {
     int retry_max           = 0;
@@ -42,25 +41,15 @@ private:
 
 using FcopyAwaiter = FcopyClient::AwaiterType;
 using FcopyTask = WFNetworkTask<FcopyRequest, FcopyResponse>;
-using FcopyServerBase = WFServer<FcopyRequest, FcopyResponse>;
-using FcopyServerContext = coke::ServerContext<WFNetworkTask<FcopyRequest, FcopyResponse>>;
-using FcopyProcessor = std::function<coke::Task<>(FcopyServerContext)>;
+using FcopyServerBase = coke::BasicServer<FcopyRequest, FcopyResponse>;
+using FcopyServerContext = coke::ServerContext<FcopyRequest, FcopyResponse>;
+using FcopyProcessor = FcopyServerBase::ProcessorType;
 
 class FcopyServer : public FcopyServerBase {
 public:
-    FcopyServer(const WFServerParams &params, FcopyProcessor co_proc)
-      : FcopyServerBase(&params, std::bind(&FcopyServer::do_proc, this, std::placeholders::_1)),
-        co_proc(std::move(co_proc))
+    FcopyServer(const WFServerParams &params, ProcessorType co_proc)
+      : FcopyServerBase(params, std::move(co_proc))
     { }
-
-private:
-    void do_proc(FcopyTask *task) {
-        coke::Task<> t = co_proc(FcopyServerContext(task));
-        t.start_on_series(series_of(task));
-    }
-
-private:
-    FcopyProcessor co_proc;
 };
 
 template<typename RequestMsg, typename ResponseMsg>

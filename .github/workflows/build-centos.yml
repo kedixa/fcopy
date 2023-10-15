@@ -3,7 +3,7 @@ on:
 
 env:
   wf_tag: v0.10.8
-  coke_sha: f4a2d2b1305e5b6414f3343f401000caec08d3b6
+  coke_sha: e5ba8ff766cc8cba513ca86abf0951d877390f28
 
 jobs:
   build-centos7:

@@ -31,10 +31,6 @@ enum class Command : uint16_t {
     SET_CHAIN_RESP      = 0x1011,
 };
 
-enum class Error : int16_t {
-
-};
-
 class MessageBase {
     struct DataDeleter {
         void operator()(void *data) { std::free(data); }
