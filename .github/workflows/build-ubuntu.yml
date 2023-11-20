@@ -1,0 +1,44 @@
+on:
+  workflow_dispatch:
+
+env:
+  wf_tag: v0.10.8
+  coke_sha: e5ba8ff766cc8cba513ca86abf0951d877390f28
+
+jobs:
+  build-ubuntu-2204:
+    name: ubuntu-22.04
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04
+    steps:
+    - name: Prepare
+      run: |
+        apt update
+        apt install -y gcc-12 g++-12 libssl-dev git cmake
+    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+      with:
+          repository: sogou/workflow
+          ref: ${{ env.wf_tag }}
+          path: workflow
+    - uses: actions/checkout@v3
+      with:
+          repository: kedixa/coke
+          ref: ${{ env.coke_sha }}
+          path: coke
+    - name: Build
+      run: |
+        export CC=gcc-12 CXX=g++-12
+        cmake -S workflow -B build.workflow -D CMAKE_CXX_STANDARD=20
+        make -C build.workflow -j 8
+        cmake -S coke -B build.coke -D Workflow_DIR=../workflow
+        make -C build.coke -j 8
+        cmake -S . -B build.cmake -D Workflow_DIR=workflow -D Coke_DIR=build.coke
+        make -C build.cmake -j 8
+        mkdir fcopy-ubuntu2204
+        cp build.cmake/fcopy-cli build.cmake/fcopy-server fcopy-ubuntu2204
+    - uses: actions/upload-artifact@v3
+      with:
+        name: fcopy-ubuntu2204
+        path: fcopy-ubuntu2204
