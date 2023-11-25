@@ -20,7 +20,7 @@ add_executable(fcopy-cli
     common/co_fcopy.cpp
     common/utils.cpp
     common/localaddr.cpp
-    client/fcopy_handler.cpp
+    client/file_sender.cpp
     client/fcopy_cli.cpp
 )
 
@@ -29,11 +29,7 @@ install(TARGETS ${ALL_TARGETS}
 )
 
 foreach(target ${ALL_TARGETS})
-    target_include_directories(${target} PRIVATE
-        common
-        client
-        server
-    )
+    target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
     target_link_directories(${target} PRIVATE
         ${WORKFLOW_LIB_DIR}

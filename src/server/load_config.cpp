@@ -6,8 +6,8 @@
 #include <map>
 #include <cmath>
 
-#include "structures.h"
-#include "fcopy_log.h"
+#include "common/structures.h"
+#include "common/fcopy_log.h"
 
 template<typename T>
 using config_map_t = std::map<std::string, T *>;

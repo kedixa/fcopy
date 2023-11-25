@@ -7,7 +7,7 @@
 #include <vector>
 #include <map>
 
-#include "structures.h"
+#include "common/structures.h"
 
 struct FileInfo {
     int fd;

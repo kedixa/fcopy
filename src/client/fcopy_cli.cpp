@@ -7,9 +7,9 @@
 #include <unistd.h>
 
 #include "coke/coke.h"
-#include "fcopy_handler.h"
-#include "fcopy_log.h"
-#include "utils.h"
+#include "client/file_sender.h"
+#include "common/fcopy_log.h"
+#include "common/utils.h"
 
 namespace fs = std::filesystem;
 
@@ -87,8 +87,8 @@ bool do_check_self() {
     return true;
 }
 
-coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
-    FcopyHandler h(cli, params);
+coke::Task<int> upload_file(FcopyClient &cli, SenderParams params) {
+    FileSender h(cli, params);
     int error;
 
     error = co_await h.create_file(cfg.direct_io);
@@ -104,9 +104,8 @@ coke::Task<int> upload_file(FcopyClient &cli, FcopyParams params) {
         else
             FLOG_INFO("SendFileDone");
 
-        std::string speed_str = h.get_speed_str();
-        double cost = h.get_cost_ms();
-        cost /= 1000000;
+        std::string speed_str = format_bps(h.get_file_size(), h.get_cost_us());
+        double cost = h.get_cost_us() / 1.0e6;
         FLOG_INFO("Send Cost:%.4lf Speed:%s", cost, speed_str.c_str());
     }
 
@@ -291,7 +290,7 @@ int main(int argc, char *argv[]) {
     int error;
 
     for (const FileDesc &file : cfg.files) {
-        FcopyParams params;
+        SenderParams params;
         params.file_path = file.path;
         params.partition = "";
         params.remote_file_dir = ".";

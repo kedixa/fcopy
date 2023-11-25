@@ -4,12 +4,15 @@
 #include <string>
 #include <map>
 #include <cstdint>
+#include <vector>
 
 struct ChainTarget {
     std::string host;
     uint16_t port;
     std::string file_token;
 };
+
+using ChainTargets = std::vector<ChainTarget>;
 
 struct FsPartition {
     std::string name;

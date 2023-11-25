@@ -7,10 +7,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "structures.h"
-#include "fcopy_log.h"
-#include "service.h"
-#include "utils.h"
+#include "common/structures.h"
+#include "common/fcopy_log.h"
+#include "common/utils.h"
+#include "server/service.h"
 
 FcopyConfig conf;
 std::unique_ptr<FcopyService> service;

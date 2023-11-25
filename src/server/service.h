@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <map>
 
-#include "co_fcopy.h"
-#include "file_manager.h"
+#include "common/co_fcopy.h"
+#include "server/file_manager.h"
 
 struct FcopyServerParams {
     size_t max_connections      = 4096;

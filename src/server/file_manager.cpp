@@ -1,4 +1,4 @@
-#include "file_manager.h"
+#include "server/file_manager.h"
 
 #include <filesystem>
 #include <cerrno>
@@ -80,27 +80,6 @@ static int create_fd(const char *path, int flag, int mode) {
     }
 
     return -1;
-}
-
-static unsigned char *mmap_and_clear(const char *path, int size) {
-    int fd = open(path, O_CREAT|O_RDWR, 0600);
-    void *addr;
-
-    if (fd > 0) {
-        if (ftruncate(fd, size) == 0) {
-            addr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-            close(fd);
-
-            if (addr != MAP_FAILED) {
-                memset(addr, 0, size);
-                return (unsigned char *)addr;
-            }
-        }
-
-        close(fd);
-    }
-
-    return NULL;
 }
 
 constexpr std::size_t PAGE_SIZE = 8 * 1024;

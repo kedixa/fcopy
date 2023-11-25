@@ -7,7 +7,7 @@
 #include <vector>
 #include <memory>
 
-#include "structures.h"
+#include "common/structures.h"
 #include "workflow/ProtocolMessage.h"
 
 // chunk_size should be multiple of FCOPY_CHUNK_BASE
@@ -170,6 +170,18 @@ public:
     constexpr static Command ThisCmd = Command::SEND_FILE_RESP;
 
     SendFileResp() : MessageBase(ThisCmd) { }
+
+/*
+// TODO support later
+protected:
+    int decode_body() noexcept override;
+    int encode_body(struct iovec vectors[], int max) noexcept override;
+
+public:
+    // send file error may occur anywhere in the send chain,
+    // this string indicates which target the error occurred on.
+    std::string error_from;
+*/
 };
 
 class CloseFileReq : public MessageBase {

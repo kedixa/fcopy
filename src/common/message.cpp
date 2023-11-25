@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <type_traits>
 
-#include "message.h"
+#include "common/message.h"
 
 static bool create_message(std::unique_ptr<MessageBase> &ptr, Command cmd) {
     switch (cmd) {
@@ -298,6 +298,25 @@ int SendFileReq::encode_body(struct iovec vectors[], int max) noexcept {
     vectors[1].iov_len = data_view.size();
     return 2;
 }
+
+/*
+// TODO support later
+int SendFileResp::decode_body() noexcept {
+    std::size_t pos = 0;
+
+    FAIL_IF(decode_string(body, pos, error_from));
+    return (pos == body.size()) ? 1 : -1;
+}
+
+int SendFileResp::encode_body(struct iovec vectors[], int max) noexcept {
+    append_string(body, error_from);
+
+    vectors->iov_base = body.data();
+    vectors->iov_len = body.size();
+
+    return 1;
+}
+*/
 
 int CloseFileReq::decode_body() noexcept {
     std::size_t pos = 0;

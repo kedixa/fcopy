@@ -1,9 +1,7 @@
 #ifndef FCOPY_TASK_H
 #define FCOPY_TASK_H
 
-#include "message.h"
-#include "coke/network.h"
-#include "coke/detail/task.h"
+#include "common/message.h"
 #include "coke/global.h"
 #include "coke/basic_server.h"
 
