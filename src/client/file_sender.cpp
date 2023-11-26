@@ -109,6 +109,11 @@ coke::Task<> FileSender::parallel_send(RemoteTarget target, std::string token) {
             break;
         }
 
+        if (speed_limiter && result.nbytes > 0) {
+            constexpr long MB = 1024 * 1024;
+            co_await speed_limiter->get(result.nbytes / MB);
+        }
+
         SendFileReq req;
         SendFileResp resp;
 

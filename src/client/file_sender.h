@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <atomic>
 
+#include "coke/qps_pool.h"
 #include "common/co_fcopy.h"
 
 enum {
@@ -48,6 +49,10 @@ public:
     coke::Task<int> close_file();
     coke::Task<int> send_file();
 
+    void set_speed_limiter(coke::QpsPool *limiter) {
+        speed_limiter = limiter;
+    }
+
     int get_error() const { return error; }
 
     // get info after send
@@ -65,6 +70,7 @@ private:
 private:
     FcopyClient &cli;
     SenderParams params;
+    coke::QpsPool *speed_limiter{nullptr};
 
     std::mutex mtx;
     std::atomic<int> error{0};

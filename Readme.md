@@ -41,14 +41,16 @@ fcopy-server -c fcopy.conf
 
 - `-t, --target  ip:port`，指定一个目标地址，多次使用该选项可指定多个地址，例如`fcopy-cli -t 192.168.0.1:5200 -t 192.168.0.2:5200 ...`
 - `--target-list  target.txt`，指定一个文本文件，其中的每一行都是一个目标地址
-- `-p, --parallel  n`指定执行拷贝的并发数，范围`[1, 512]`，例如`fcopy-cli -p 16 ...`
+- `-p, --parallel  n`指定执行拷贝的并发数，范围`[1, 900]`，例如`fcopy-cli -p 16 ...`
+- `--send-method  m`，指定发送模式，目前支持`chain`和`tree`两种
+- `--speed-limit  n`，指定最大传输速率，单位为MB
 - `--wait-close, --no-wait-close`，一个文件传输后是否等待服务端完全关闭文件后再执行下一项操作，默认等待
 - `--direct-io, --no-direct-io`，读取文件时是否启用`direct io`，默认启用
 - `--check-self, --no-check-self`，检查远程目标中是否有本机IP或者重复地址，默认开启
 - `--dry-run`，仅打印当前命令将会传输哪些文件，而不执行传输操作
 - `-h, --help`，打印帮助信息到标准输出
 
-目前仅支持链式传输模式，因此要求各个传输目标之间均可互相连通
+目前支持链式和树形传输模式，要求各个传输目标之间均可互相连通
 
 示例，将文件`a.txt`、`b.bin`, 文件夹`dir1`、`dir2`发送到两个指定目标机器上，并发数为16
 ```bash

@@ -17,6 +17,7 @@ enum {
     TARGET_LIST     = 0x0101,
     DRY_RUN         = 0x0102,
     SEND_METHOD     = 0x0103,
+    SPEED_LIMIT     = 0x0104,
 
     NO_WAIT_CLOSE   = 0x0200,
     WAIT_CLOSE      = 0x0201,
@@ -34,6 +35,7 @@ struct option long_opts[] = {
     {"parallel",        1, nullptr, 'p'},
     {"dry-run",         0, nullptr, DRY_RUN},
     {"send-method",     1, nullptr, SEND_METHOD},
+    {"speed-limit",     1, nullptr, SPEED_LIMIT},
     {"wait-close",      0, nullptr, WAIT_CLOSE},
     {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
     {"direct-io",       0, nullptr, DIRECT_IO},
@@ -53,12 +55,14 @@ struct GlobalConfig {
     bool direct_io = true;
     bool check_self = true;
 
-    int send_method;
+    int send_method = SEND_METHOD_CHAIN;
+    long speed_limit = 0;
     std::vector<RemoteTarget> targets;
     std::vector<FileDesc> files;
 };
 
 GlobalConfig cfg;
+coke::QpsPool speed_limiter(0);
 
 bool do_check_self() {
     std::vector<std::string> addrs;
@@ -96,6 +100,7 @@ coke::Task<int> upload_file(FcopyClient &cli, SenderParams params) {
     int error;
     int close_error;
 
+    h.set_speed_limiter(&speed_limiter);
     error = co_await h.create_file();
     if (error) {
         FLOG_ERROR("CreateFileError error:%d", error);
@@ -133,8 +138,9 @@ void usage(const char *name) {
         "                       add a file server target\n"
         "  --target-list file\n"
         "                       read target in `file`, one host:port per line\n\n"
-        "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n\n"
+        "  -p, --parallel n     send in parallel, n in [1, 900], default 1\n\n"
         "  --send-method m      send with method, support chain, tree\n\n"
+        "  --speed-limit n      set the maximum transfer rate in MB\n\n"
         "  --wait-close, --no-wait-close\n"
         "                       whether wait server finish close file, default wait\n\n"
         "  --direct-io, --no-direct-io\n"
@@ -241,6 +247,14 @@ int parse_args(int argc, char *argv[]) {
             }
             break;
 
+        case SPEED_LIMIT:
+            cfg.speed_limit = std::atol(arg);
+            if (cfg.speed_limit <= 0) {
+                FLOG_ERROR("Invalid speed limit %ld\n", cfg.speed_limit);
+                return 1;
+            }
+            break;
+
         case WAIT_CLOSE:    cfg.wait_close = true; break;
         case NO_WAIT_CLOSE: cfg.wait_close = false; break;
 
@@ -304,6 +318,8 @@ int main(int argc, char *argv[]) {
     settings.poller_threads = 8;
     settings.handler_threads = 12;
     coke::library_init(settings);
+
+    speed_limiter.reset_qps(cfg.speed_limit);
 
     FcopyClientParams cli_params;
     cli_params.retry_max = 2;
