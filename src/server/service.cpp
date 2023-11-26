@@ -39,7 +39,7 @@ coke::Task<> write_file(int fd, std::string_view data, uint64_t offset, int &err
 }
 
 static
-coke::Task<int> send_one(FcopyClient &cli, const RemoteTarget &target, SendFileReq req) {
+coke::Task<int> send_one(FcopyClient &cli, RemoteTarget target, SendFileReq req) {
     SendFileResp resp;
     std::string token;
     int error;
