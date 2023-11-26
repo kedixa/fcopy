@@ -9,6 +9,11 @@
 
 #include "common/co_fcopy.h"
 
+enum {
+    SEND_METHOD_CHAIN = 0,
+    SEND_METHOD_TREE = 1,
+};
+
 struct SenderParams {
     using perms = std::filesystem::perms;
 
@@ -26,7 +31,10 @@ struct SenderParams {
     std::string remote_file_dir;
     std::string remote_file_name;
 
+    bool direct_io          = true;
+    bool wait_close         = true;
     int parallel            = 16;
+    int send_method         = SEND_METHOD_CHAIN;
     std::vector<RemoteTarget> targets;
 };
 
@@ -36,8 +44,8 @@ public:
         : cli(cli), params(params)
     { }
 
-    coke::Task<int> create_file(bool direct_io);
-    coke::Task<int> close_file(bool wait_close);
+    coke::Task<int> create_file();
+    coke::Task<int> close_file();
     coke::Task<int> send_file();
 
     int get_error() const { return error; }
@@ -48,6 +56,10 @@ public:
     std::size_t get_cur_offset() const { return cur_offset; }
 
 private:
+    coke::Task<int> remote_open();
+    coke::Task<int> remote_close();
+    coke::Task<int> set_send_chain();
+    coke::Task<int> set_send_tree();
     coke::Task<> parallel_send(RemoteTarget target, std::string token);
 
 private:

@@ -9,6 +9,7 @@
 #include <map>
 
 #include "common/co_fcopy.h"
+#include "common/error_code.h"
 #include "server/file_manager.h"
 
 struct FcopyServerParams {

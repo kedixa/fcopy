@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 enum {
     TARGET_LIST     = 0x0101,
     DRY_RUN         = 0x0102,
+    SEND_METHOD     = 0x0103,
 
     NO_WAIT_CLOSE   = 0x0200,
     WAIT_CLOSE      = 0x0201,
@@ -32,6 +33,7 @@ struct option long_opts[] = {
     {"target-list",     1, nullptr, TARGET_LIST},
     {"parallel",        1, nullptr, 'p'},
     {"dry-run",         0, nullptr, DRY_RUN},
+    {"send-method",     1, nullptr, SEND_METHOD},
     {"wait-close",      0, nullptr, WAIT_CLOSE},
     {"no-wait-close",   0, nullptr, NO_WAIT_CLOSE},
     {"direct-io",       0, nullptr, DIRECT_IO},
@@ -50,6 +52,8 @@ struct GlobalConfig {
     bool wait_close = true;
     bool direct_io = true;
     bool check_self = true;
+
+    int send_method;
     std::vector<RemoteTarget> targets;
     std::vector<FileDesc> files;
 };
@@ -90,8 +94,9 @@ bool do_check_self() {
 coke::Task<int> upload_file(FcopyClient &cli, SenderParams params) {
     FileSender h(cli, params);
     int error;
+    int close_error;
 
-    error = co_await h.create_file(cfg.direct_io);
+    error = co_await h.create_file();
     if (error) {
         FLOG_ERROR("CreateFileError error:%d", error);
     }
@@ -109,13 +114,16 @@ coke::Task<int> upload_file(FcopyClient &cli, SenderParams params) {
         FLOG_INFO("Send Cost:%.4lf Speed:%s", cost, speed_str.c_str());
     }
 
-    error = co_await h.close_file(cfg.wait_close);
-    if (error)
-        FLOG_ERROR("CloseFileError error:%d", error);
+    close_error = co_await h.close_file();
+    if (close_error)
+        FLOG_ERROR("CloseFileError error:%d", close_error);
     else
         FLOG_INFO("CloseFileDone");
 
-    co_return error;
+    if (error == 0)
+        co_return close_error;
+    else
+        co_return error;
 }
 
 void usage(const char *name) {
@@ -126,6 +134,7 @@ void usage(const char *name) {
         "  --target-list file\n"
         "                       read target in `file`, one host:port per line\n\n"
         "  -p, --parallel n     send in parallel, n in [1, 512], default 1\n\n"
+        "  --send-method m      send with method, support chain, tree\n\n"
         "  --wait-close, --no-wait-close\n"
         "                       whether wait server finish close file, default wait\n\n"
         "  --direct-io, --no-direct-io\n"
@@ -194,6 +203,7 @@ bool parse_targets(std::vector<RemoteTarget> &targets, std::string filename) {
 }
 
 int parse_args(int argc, char *argv[]) {
+    std::string method;
     const char *arg;
     int copt;
 
@@ -218,6 +228,18 @@ int parse_args(int argc, char *argv[]) {
             break;
 
         case DRY_RUN: cfg.dry_run = true; break;
+
+        case SEND_METHOD:
+            method.assign(arg);
+            if (method == "chain")
+                cfg.send_method = SEND_METHOD_CHAIN;
+            else if (method == "tree")
+                cfg.send_method = SEND_METHOD_TREE;
+            else {
+                FLOG_ERROR("Invalid send method %s", arg);
+                return 1;
+            }
+            break;
 
         case WAIT_CLOSE:    cfg.wait_close = true; break;
         case NO_WAIT_CLOSE: cfg.wait_close = false; break;
@@ -267,8 +289,8 @@ int main(int argc, char *argv[]) {
 
     if (cfg.parallel < 1)
         cfg.parallel = 1;
-    else if (cfg.parallel > 512)
-        cfg.parallel = 512;
+    else if (cfg.parallel > 900)
+        cfg.parallel = 900;
 
     if (cfg.check_self && !do_check_self())
         return -1;
@@ -278,7 +300,7 @@ int main(int argc, char *argv[]) {
 
     // coke global init
     coke::GlobalSettings settings;
-    settings.endpoint_params.max_connections = 1024;
+    settings.endpoint_params.max_connections = 4096;
     settings.poller_threads = 8;
     settings.handler_threads = 12;
     coke::library_init(settings);
@@ -297,6 +319,10 @@ int main(int argc, char *argv[]) {
         params.remote_file_name = file.path;
         params.targets = cfg.targets;
         params.parallel = cfg.parallel;
+        params.send_method = cfg.send_method;
+
+        params.direct_io = cfg.direct_io;
+        params.wait_close = cfg.wait_close;
 
         error = coke::sync_wait(upload_file(cli, params));
         if (error)

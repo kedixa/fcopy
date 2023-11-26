@@ -188,7 +188,7 @@ coke::Task<> FcopyService::handle_create_file(FcopyServerContext &ctx) {
 
     partition_dir = get_partition_dir(req.partition);
     if (partition_dir.empty())
-        error = -1;
+        error = ERR_NO_PARTITION;
     else
         error = get_abs_path(partition_dir, req.relative_path, req.file_name, abs_path);
 
@@ -226,7 +226,7 @@ coke::Task<> FcopyService::handle_close_file(FcopyServerContext &ctx) {
         if (mng->has_file(req.file_token))
             error = 0;
         else
-            error = -ENOENT;
+            error = ERR_NO_FILE;
     }
 
     resp.set_error(error);
