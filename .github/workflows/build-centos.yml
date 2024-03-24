@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
 
 env:
-  wf_tag: v0.11.1
-  coke_sha: 009945f393695b3de5ceb005797b386779a37b06
+  wf_tag: v0.11.3
+  coke_sha: 57e97cc841ff26f5105f7f23f44caf64f10b9b5a
 
 jobs:
   build-centos7:
