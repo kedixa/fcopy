@@ -16,13 +16,13 @@ jobs:
       run: |
         apt update
         apt install -y gcc-12 g++-12 libssl-dev git cmake
-    - uses: actions/checkout@v3
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
           repository: sogou/workflow
           ref: ${{ env.wf_tag }}
           path: workflow
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
           repository: kedixa/coke
           ref: ${{ env.coke_sha }}
@@ -38,7 +38,7 @@ jobs:
         make -C build.cmake -j 8
         mkdir fcopy-ubuntu2204
         cp build.cmake/fcopy-cli build.cmake/fcopy-server fcopy-ubuntu2204
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: fcopy-ubuntu2204
         path: fcopy-ubuntu2204

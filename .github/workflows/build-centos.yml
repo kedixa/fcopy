@@ -16,13 +16,13 @@ jobs:
       run: |
         yum install --nogpgcheck -y epel-release centos-release-scl
         yum install --nogpgcheck -y devtoolset-11-gcc devtoolset-11-gcc-c++ openssl openssl-devel git cmake3
-    - uses: actions/checkout@v3
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
           repository: sogou/workflow
           ref: ${{ env.wf_tag }}
           path: workflow
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
           repository: kedixa/coke
           ref: ${{ env.coke_sha }}
@@ -37,7 +37,7 @@ jobs:
         scl enable devtoolset-11 "make -C build.cmake -j 8"
         mkdir fcopy-centos7
         cp build.cmake/fcopy-cli build.cmake/fcopy-server fcopy-centos7
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: fcopy-centos7
         path: fcopy-centos7
