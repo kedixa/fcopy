@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
 
 env:
-  wf_tag: v0.11.3
-  coke_sha: 57e97cc841ff26f5105f7f23f44caf64f10b9b5a
+  wf_tag: v0.11.6
+  coke_sha: 7f7af4140b5a1bca5c004f47bb25d9cb0ef8d4ae
 
 jobs:
   build-ubuntu-2204:
